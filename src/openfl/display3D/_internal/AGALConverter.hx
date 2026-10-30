@@ -552,7 +552,7 @@ class AGALConverter
 			sb.add("\n");
 		}
 
-		#if lime
+		#if (lime && !openfl_wgpu)
 		if (limitedProfile == null)
 		{
 			var version:String = GL.getParameter(GL.VERSION);

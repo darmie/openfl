@@ -102,7 +102,7 @@ class Context3DState
 		textures = new Array();
 		__frontFaceGLCCW = true;
 
-		#if lime
+		#if (lime && !openfl_wgpu)
 		__glBlendEquation = GL.FUNC_ADD;
 		#end
 	}

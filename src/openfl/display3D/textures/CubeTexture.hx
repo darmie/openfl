@@ -348,7 +348,7 @@ import openfl.utils.ByteArray;
 
 		var hasTexture = false;
 
-		#if lime
+		#if (lime && !openfl_wgpu)
 		reader.readTextures(function(side, level, gpuFormat, width, height, blockLength, bytes)
 		{
 			var format = alpha ? TextureBase.__compressedFormatsAlpha[gpuFormat] : TextureBase.__compressedFormats[gpuFormat];

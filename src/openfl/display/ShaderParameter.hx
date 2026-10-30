@@ -187,7 +187,7 @@ import openfl.display3D.Context3D;
 	{
 		if (index < 0) return;
 
-		#if lime
+		#if (lime && !openfl_wgpu)
 		var gl = context.gl;
 
 		var value = overrideValue != null ? overrideValue : this.value;

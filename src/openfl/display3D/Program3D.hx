@@ -487,7 +487,7 @@ import lime.utils.BytePointer;
 	{
 		if (__format == GLSL) return;
 
-		#if lime
+		#if (lime && !openfl_wgpu)
 		var gl = __context.gl;
 
 		__agalUniforms.clear();
@@ -996,7 +996,7 @@ import lime.utils.BytePointer;
 
 	public function flush():Void
 	{
-		#if lime
+		#if (lime && !openfl_wgpu)
 		#if (js && html5)
 		var gl = context.gl;
 		#else

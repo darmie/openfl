@@ -2233,7 +2233,7 @@ class BitmapData implements IBitmapDrawable
 	@SuppressWarnings("checkstyle:Dynamic")
 	@:dox(hide) public function getSurface():#if (lime && !openfl_wgpu) CairoImageSurface #else Dynamic #end
 	{
-		#if lime
+		#if (lime && !openfl_wgpu)
 		if (!readable) return null;
 
 		if (__surface == null)
