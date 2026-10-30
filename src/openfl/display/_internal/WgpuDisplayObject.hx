@@ -26,6 +26,7 @@ class WgpuDisplayObject
 			local = new Affine(world.a, world.b, world.c, world.d, world.tx, world.ty).after(local);
 		}
 
+		renderer.__beginVectors();
 		WgpuGraphics.render(graphics, renderer, local, alpha);
 	}
 }

@@ -221,6 +221,10 @@ class BitmapData implements IBitmapDrawable
 	@:noCompletion private var __textureHeight:Int;
 	@:noCompletion private var __textureVersion:Int;
 	@:noCompletion private var __textureWidth:Int;
+	#if openfl_wgpu
+	@:noCompletion private var __wgpuTexture:puffpuff.gpu.WgpuContext3D.WgpuTexture;
+	@:noCompletion private var __wgpuTextureVersion:Int = -1;
+	#end
 	@:noCompletion private var __transform:Matrix;
 	@:noCompletion private var __uvRect:Rectangle;
 	@:noCompletion private var __vertexBuffer:VertexBuffer3D;
@@ -788,6 +792,14 @@ class BitmapData implements IBitmapDrawable
 		__vertexBuffer = null;
 		__framebuffer = null;
 		__framebufferContext = null;
+		#if openfl_wgpu
+		if (__wgpuTexture != null)
+		{
+			__wgpuTexture.dispose();
+			__wgpuTexture = null;
+		}
+		#end
+
 		__texture = null;
 		__textureContext = null;
 
