@@ -8,9 +8,8 @@ import openfl.display._internal.WgpuDisplayObjectContainer;
 import puffpuff.canvas.Canvas2D;
 
 /**
-	Renders the display list with WebGPU. Vector graphics are tessellated and drawn by `Canvas2D`
-	in one pass per `__render`; coordinates are device pixels (the stage display matrix carries the
-	window scale).
+	Renders the display list with WebGPU. Vector graphics go through `Canvas2D`, one pass per `__render`. Coordinates
+	are device pixels, since the stage display matrix has the window scale.
 **/
 #if !openfl_debug
 @:fileXml('tags="haxe,release"')
@@ -29,8 +28,6 @@ class WgpuRenderer extends DisplayObjectRenderer
 	public var canvas(default, null):Canvas2D;
 
 	@:noCompletion private var __projection:Matrix4;
-	@:noCompletion private var __width:Int;
-	@:noCompletion private var __height:Int;
 
 	@:noCompletion private function new(context:RenderContext)
 	{
@@ -61,7 +58,6 @@ class WgpuRenderer extends DisplayObjectRenderer
 
 	@:noCompletion private override function __render(object:IBitmapDrawable):Void
 	{
-		canvas.pixelRatio = __pixelRatio;
 		canvas.begin();
 		__renderDrawable(object);
 		canvas.flush(__projection);
@@ -83,9 +79,7 @@ class WgpuRenderer extends DisplayObjectRenderer
 
 	@:noCompletion private override function __resize(width:Int, height:Int):Void
 	{
-		__width = width;
-		__height = height;
-		__projection.createOrtho(0, width / __pixelRatio, height / __pixelRatio, 0, -1, 1);
+		__projection.createOrtho(0, width, height, 0, -1, 1);
 	}
 }
 #end
