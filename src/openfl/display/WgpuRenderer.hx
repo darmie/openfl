@@ -6,6 +6,7 @@ import lime.math.Matrix4;
 import openfl.display._internal.WgpuBitmap;
 import openfl.display._internal.WgpuDisplayObject;
 import openfl.display._internal.WgpuDisplayObjectContainer;
+import openfl.display._internal.WgpuTextField;
 import puffpuff.canvas.Canvas2D;
 import puffpuff.gpu.QuadBatcher;
 import puffpuff.gpu.WgpuContext3D.WgpuTexture;
@@ -145,6 +146,8 @@ class WgpuRenderer extends DisplayObjectRenderer
 				WgpuDisplayObject.renderDrawable(cast object, this);
 			case BITMAP:
 				WgpuBitmap.renderDrawable(cast object, this);
+			case TEXT_FIELD:
+				WgpuTextField.renderDrawable(cast object, this);
 			default:
 		}
 	}
