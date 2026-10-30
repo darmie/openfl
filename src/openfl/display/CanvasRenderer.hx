@@ -11,7 +11,7 @@ import openfl.display._internal.CanvasTilemap;
 import openfl.display._internal.CanvasVideo;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
-#if lime
+#if (lime && !openfl_wgpu)
 #if !openfl_wgpu
 import lime.graphics.Canvas2DRenderContext;
 #end
@@ -54,7 +54,7 @@ class CanvasRenderer extends DisplayObjectRenderer
 
 		__tempMatrix = new Matrix();
 
-		#if lime
+		#if (lime && !openfl_wgpu)
 		__type = CANVAS;
 		#end
 	}

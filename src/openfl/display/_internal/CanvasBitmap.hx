@@ -3,7 +3,7 @@ package openfl.display._internal;
 #if !flash
 import openfl.display.Bitmap;
 import openfl.display.CanvasRenderer;
-#if lime
+#if (lime && !openfl_wgpu)
 #if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil; // TODO
 #end

@@ -535,7 +535,7 @@ class DisplayObjectRenderer extends EventDispatcher
 						#if (js && html5)
 						ImageCanvasUtil.convertToCanvas(displayObject.__cacheBitmapData.image);
 						displayObject.__cacheBitmapRenderer = new CanvasRenderer(displayObject.__cacheBitmapData.image.buffer.__srcContext);
-						#else
+						#elseif lime_cairo
 						displayObject.__cacheBitmapRenderer = new CairoRenderer(new Cairo(displayObject.__cacheBitmapData.getSurface()));
 						#end
 					}

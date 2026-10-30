@@ -1,7 +1,7 @@
 package openfl.display._internal;
 
 #if !flash
-#if lime
+#if (lime && !openfl_wgpu)
 #if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil; // TODO
 #end

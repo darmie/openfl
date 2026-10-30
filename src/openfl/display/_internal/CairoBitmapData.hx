@@ -1,7 +1,7 @@
 package openfl.display._internal;
 
 #if !flash
-#if lime
+#if (lime && !openfl_wgpu)
 #if !openfl_wgpu
 import lime.graphics.cairo.CairoFilter;
 import lime.graphics.cairo.CairoPattern;

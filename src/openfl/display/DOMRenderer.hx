@@ -11,7 +11,7 @@ import openfl.display._internal.DOMTilemap;
 import openfl.display._internal.DOMVideo;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
-#if lime
+#if (lime && !openfl_wgpu)
 import lime.graphics.DOMRenderContext;
 #end
 #if (js && html5)
@@ -87,7 +87,7 @@ class DOMRenderer extends DisplayObjectRenderer
 		__numClipRects = 0;
 		__z = 0;
 
-		#if lime
+		#if (lime && !openfl_wgpu)
 		__type = DOM;
 		#end
 

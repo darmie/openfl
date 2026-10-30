@@ -9,7 +9,7 @@ import openfl.display.Tilemap;
 import openfl.display.Tileset;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
-#if lime
+#if (lime && !openfl_wgpu)
 // TODO: Avoid use of private APIs
 #if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil;

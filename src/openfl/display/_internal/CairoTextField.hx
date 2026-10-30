@@ -9,7 +9,7 @@ import openfl.display.Graphics;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 import openfl.text.TextField;
-#if lime
+#if (lime && !openfl_wgpu)
 #if !openfl_wgpu
 import lime.graphics.cairo.Cairo;
 import lime.graphics.cairo.CairoAntialias;

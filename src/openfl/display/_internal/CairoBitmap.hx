@@ -3,7 +3,7 @@ package openfl.display._internal;
 #if !flash
 import openfl.display.Bitmap;
 import openfl.display.CairoRenderer;
-#if lime
+#if (lime && !openfl_wgpu)
 #if !openfl_wgpu
 import lime.graphics.cairo.CairoFilter;
 import lime.graphics.cairo.CairoPattern;
@@ -23,7 +23,7 @@ class CairoBitmap
 {
 	public static inline function render(bitmap:Bitmap, renderer:CairoRenderer):Void
 	{
-		#if lime
+		#if (lime && !openfl_wgpu)
 		if (!bitmap.__renderable) return;
 
 		var alpha = renderer.__getAlpha(bitmap.__worldAlpha);

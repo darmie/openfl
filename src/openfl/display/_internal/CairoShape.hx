@@ -4,7 +4,7 @@ package openfl.display._internal;
 import openfl.display.CairoRenderer;
 import openfl.display.DisplayObject;
 import openfl.geom.Matrix;
-#if lime
+#if (lime && !openfl_wgpu)
 #if !openfl_wgpu
 import lime.graphics.cairo.CairoFilter;
 import lime.graphics.cairo.CairoPattern;

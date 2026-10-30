@@ -12,7 +12,7 @@ import openfl.display._internal.CairoTextField;
 import openfl.display._internal.CairoTilemap;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
-#if lime
+#if (lime && !openfl_wgpu)
 #if !openfl_wgpu
 import lime.graphics.cairo.Cairo;
 import lime.graphics.cairo.CairoOperator;
@@ -47,7 +47,7 @@ class CairoRenderer extends DisplayObjectRenderer
 	public var cairo:#if (lime && !openfl_wgpu) CairoRenderContext #else Dynamic #end;
 
 	@:noCompletion private var __matrix:Matrix;
-	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __matrix3:#if lime Matrix3 #else Dynamic #end;
+	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __matrix3:#if (lime && !openfl_wgpu) Matrix3 #else Dynamic #end;
 
 	@SuppressWarnings("checkstyle:Dynamic")
 	@:noCompletion private function new(cairo:#if (lime && !openfl_wgpu) Cairo #else Dynamic #end)
@@ -246,7 +246,7 @@ class CairoRenderer extends DisplayObjectRenderer
 	@SuppressWarnings("checkstyle:Dynamic")
 	@:noCompletion private function __setBlendModeCairo(cairo:#if (lime && !openfl_wgpu) Cairo #else Dynamic #end, value:BlendMode):Void
 	{
-		#if lime
+		#if (lime && !openfl_wgpu)
 		switch (value)
 		{
 			case ADD:
