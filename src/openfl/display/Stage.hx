@@ -1389,6 +1389,11 @@ class Stage extends DisplayObjectContainer #if lime implements IModule #end
 				__renderer = new OpenGLRenderer(context3D);
 				#end
 
+			#if openfl_wgpu
+			case WGPU:
+				__renderer = new WgpuRenderer(window.context);
+
+			#end
 			case CANVAS:
 				#if (js && html5)
 				__renderer = new CanvasRenderer(window.context.canvas2D);
