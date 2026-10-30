@@ -21,7 +21,9 @@ import openfl.geom.Transform;
 import openfl.ui.MouseCursor;
 import openfl.Vector;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.cairo.Cairo;
+#end
 #end
 #if (js && html5)
 import js.html.CanvasElement;
@@ -974,7 +976,7 @@ class DisplayObject extends EventDispatcher implements IBitmapDrawable #if (open
 	@:noCompletion private var __cacheBitmapData3:BitmapData;
 	@:noCompletion private var __cacheBitmapMatrix:Matrix;
 	@:noCompletion private var __cacheBitmapRenderer:DisplayObjectRenderer;
-	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __cairo:#if lime Cairo #else Dynamic #end;
+	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __cairo:#if (lime && !openfl_wgpu) Cairo #else Dynamic #end;
 	@:noCompletion private var __children:Array<DisplayObject>;
 	@:noCompletion private var __customRenderClear:Bool;
 	@:noCompletion private var __customRenderEvent:RenderEvent;

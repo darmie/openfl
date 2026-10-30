@@ -26,11 +26,15 @@ import openfl.utils.Object;
 import openfl.Lib;
 import openfl.Vector;
 #if lime
+#if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil; // TODO
+#end
 import lime.app.Application;
+#if !openfl_wgpu
 import lime.graphics.cairo.CairoImageSurface;
 import lime.graphics.cairo.CairoSurface;
 import lime.graphics.cairo.Cairo;
+#end
 import lime.graphics.Image;
 import lime.graphics.ImageChannel;
 import lime.graphics.ImageBuffer;
@@ -211,7 +215,7 @@ class BitmapData implements IBitmapDrawable
 	@:noCompletion private var __renderTransform:Matrix;
 	@:noCompletion private var __scrollRect:Rectangle;
 	@:noCompletion private var __stencilBuffer:GLRenderbuffer;
-	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __surface:#if lime CairoSurface #else Dynamic #end;
+	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __surface:#if (lime && !openfl_wgpu) CairoSurface #else Dynamic #end;
 	@:noCompletion private var __texture:TextureBase;
 	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __textureContext:#if lime RenderContext #else Dynamic #end;
 	@:noCompletion private var __textureHeight:Int;
@@ -2227,7 +2231,7 @@ class BitmapData implements IBitmapDrawable
 		@returns	The associated CairoImageSurface
 	**/
 	@SuppressWarnings("checkstyle:Dynamic")
-	@:dox(hide) public function getSurface():#if lime CairoImageSurface #else Dynamic #end
+	@:dox(hide) public function getSurface():#if (lime && !openfl_wgpu) CairoImageSurface #else Dynamic #end
 	{
 		#if lime
 		if (!readable) return null;

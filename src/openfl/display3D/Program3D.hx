@@ -14,7 +14,9 @@ import openfl.errors.IllegalOperationError;
 import openfl.utils.ByteArray;
 import openfl.Vector;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.opengl.GL;
+#end
 import lime.utils.BytePointer;
 #end
 

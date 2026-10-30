@@ -19,8 +19,10 @@ import openfl.geom.ColorTransform;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.opengl.ext.KHR_debug;
 import lime.graphics.WebGLRenderContext;
+#end
 import lime.math.Matrix4;
 #end
 
@@ -68,7 +70,7 @@ class OpenGLRenderer extends DisplayObjectRenderer
 		The current OpenGL render context
 	**/
 	@SuppressWarnings("checkstyle:Dynamic")
-	public var gl:#if lime WebGLRenderContext #else Dynamic #end;
+	public var gl:#if (lime && !openfl_wgpu) WebGLRenderContext #else Dynamic #end;
 
 	@:noCompletion private static var __staticDefaultDisplayShader:DisplayObjectShader;
 	@:noCompletion private static var __staticDefaultGraphicsShader:GraphicsShader;
@@ -88,7 +90,7 @@ class OpenGLRenderer extends DisplayObjectRenderer
 	@:noCompletion private var __displayHeight:Int;
 	@:noCompletion private var __displayWidth:Int;
 	@:noCompletion private var __flipped:Bool;
-	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __gl:#if lime WebGLRenderContext #else Dynamic #end;
+	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __gl:#if (lime && !openfl_wgpu) WebGLRenderContext #else Dynamic #end;
 	@:noCompletion private var __height:Int;
 	@:noCompletion private var __maskShader:Context3DMaskShader;
 	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __matrix:#if lime Matrix4 #else Dynamic #end;

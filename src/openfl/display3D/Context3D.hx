@@ -26,11 +26,15 @@ import openfl.utils._internal.UInt8Array;
 import openfl.utils.AGALMiniAssembler;
 import openfl.utils.ByteArray;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.opengl.GL;
+#end
 import lime.graphics.Image;
 import lime.graphics.ImageBuffer;
 import lime.graphics.RenderContext;
+#if !openfl_wgpu
 import lime.graphics.WebGLRenderContext;
+#end
 import lime.math.Rectangle as LimeRectangle;
 import lime.math.Vector2;
 #end
@@ -259,7 +263,7 @@ import lime.math.Vector2;
 	@:noCompletion private static var __glMemoryTotalAvailable:Int = -1;
 	@:noCompletion private static var __glTextureMaxAnisotropy:Int = -1;
 
-	@:noCompletion private var gl:#if lime WebGLRenderContext #else Dynamic #end;
+	@:noCompletion private var gl:#if (lime && !openfl_wgpu) WebGLRenderContext #else Dynamic #end;
 	@:noCompletion private var __backBufferPixelRatio:Float;
 	@:noCompletion private var __backBufferAntiAlias:Int;
 	@:noCompletion private var __backBufferTexture:RectangleTexture;

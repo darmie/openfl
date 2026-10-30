@@ -17,7 +17,9 @@ import openfl.utils._internal.UInt16Array;
 import openfl.utils.ObjectPool;
 import openfl.Vector;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.cairo.Cairo;
+#end
 #end
 #if (js && html5)
 import js.html.CanvasElement;
@@ -95,7 +97,7 @@ import js.html.CanvasRenderingContext2D;
 	@:noCompletion private var __canvas:CanvasElement;
 	@:noCompletion private var __context:#if lime CanvasRenderingContext2D #else Dynamic #end;
 	#else
-	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __cairo:#if lime Cairo #else Dynamic #end;
+	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion private var __cairo:#if (lime && !openfl_wgpu) Cairo #else Dynamic #end;
 	#end
 	@:noCompletion private var __bitmap:BitmapData;
 	@:noCompletion private var __bitmapScaleX:Float;

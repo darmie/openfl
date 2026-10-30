@@ -15,7 +15,9 @@ import openfl.geom.Point;
 import openfl.geom.Rectangle;
 import openfl.Vector;
 #if lime
+#if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil; // TODO
+#end
 #end
 #if (js && html5)
 import js.html.CanvasElement;

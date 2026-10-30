@@ -15,7 +15,9 @@ import openfl.display3D.Program3D;
 import openfl.display.Shader;
 import openfl.geom.Rectangle;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.opengl.GL;
+#end
 #end
 
 @SuppressWarnings("checkstyle:FieldDocComment")

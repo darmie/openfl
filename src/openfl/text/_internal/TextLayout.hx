@@ -7,6 +7,7 @@ import haxe.io.UInt16Array;
 #end
 #if lime
 import lime.math.Vector2;
+#if !openfl_wgpu
 import lime.text.harfbuzz.HBBuffer;
 import lime.text.harfbuzz.HBBufferClusterLevel;
 import lime.text.harfbuzz.HBDirection;
@@ -16,6 +17,7 @@ import lime.text.harfbuzz.HBGlyphPosition;
 import lime.text.harfbuzz.HBLanguage;
 import lime.text.harfbuzz.HBScript;
 import lime.text.harfbuzz.HB;
+#end
 import lime.text.Font;
 import lime.text.Glyph;
 #else
@@ -72,8 +74,8 @@ class TextLayout
 	private var __language:String;
 	private var __script:TextScript;
 	private var __font:Font;
-	@SuppressWarnings("checkstyle:Dynamic") private var __hbBuffer:#if lime HBBuffer #else Dynamic #end;
-	@SuppressWarnings("checkstyle:Dynamic") private var __hbFont:#if lime HBFTFont #else Dynamic #end;
+	@SuppressWarnings("checkstyle:Dynamic") private var __hbBuffer:#if (lime && !openfl_wgpu) HBBuffer #else Dynamic #end;
+	@SuppressWarnings("checkstyle:Dynamic") private var __hbFont:#if (lime && !openfl_wgpu) HBFTFont #else Dynamic #end;
 	private var __hbFontSize:Int = -1;
 
 	public function new(text:String = "", font:Font = null, size:Int = 12, direction:TextDirection = LEFT_TO_RIGHT, script:TextScript = COMMON,
@@ -123,7 +125,7 @@ class TextLayout
 	{
 		if (language.length != 4) return;
 
-		#if lime
+		#if (lime && !openfl_wgpu)
 		__hbBuffer = new HBBuffer();
 		__hbBuffer.direction = direction.toHBDirection();
 		__hbBuffer.script = script.toHBScript();
@@ -135,7 +137,7 @@ class TextLayout
 	{
 		positions = [];
 
-		#if (lime && lime_cffi && !macro)
+		#if (lime && lime_cffi && !macro && !openfl_wgpu)
 		if (text != null && text != "" && font != null && font.src != null)
 		{
 			if (__buffer == null)
@@ -235,6 +237,16 @@ class TextLayout
 						new Vector2(position.xOffset / 64, position.yOffset / 64)));
 					lastCluster = info.cluster;
 				}
+			}
+		}
+		#elseif (lime && openfl_wgpu && !macro)
+		// Shaped by PuffPuff's lime.text.TextLayout (blinc_abi) instead of HarfBuzz.
+		if (text != null && text != "" && font != null)
+		{
+			var shaped = new lime.text.TextLayout(text, font, size, direction, script, language);
+			for (p in shaped.positions)
+			{
+				positions.push(new GlyphPosition(p.glyph, new Vector2(p.advance.x + letterSpacing, p.advance.y), p.offset));
 			}
 		}
 		#end
@@ -368,7 +380,7 @@ class TextLayout
 		}
 	}
 
-	#if lime
+	#if (lime && !openfl_wgpu)
 	@:to public inline function toHBDirection():HBDirection
 	{
 		return switch (this)
@@ -533,7 +545,7 @@ class TextLayout
 	public var WARANG_CITI = "Wara";
 	public var rightToLeft(get, never):Bool;
 
-	#if lime
+	#if (lime && !openfl_wgpu)
 	@:to public inline function toHBScript():HBScript
 	{
 		return switch (this)

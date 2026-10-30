@@ -4,7 +4,9 @@ package openfl.display._internal;
 import openfl.display.Bitmap;
 import openfl.display.CanvasRenderer;
 #if lime
+#if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil; // TODO
+#end
 
 #end
 @:access(openfl.display.Bitmap)

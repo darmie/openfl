@@ -4,8 +4,10 @@ package openfl.display._internal;
 import openfl.display.Bitmap;
 import openfl.display.CairoRenderer;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.cairo.CairoFilter;
 import lime.graphics.cairo.CairoPattern;
+#end
 #end
 
 #if !openfl_debug

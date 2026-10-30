@@ -13,7 +13,9 @@ import openfl.events.EventDispatcher;
 import openfl.geom.Matrix3D;
 import openfl.Vector;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.opengl.GL;
+#end
 import lime.graphics.RenderContext;
 #end
 #if (js && html5)

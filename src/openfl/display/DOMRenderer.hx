@@ -41,7 +41,7 @@ class DOMRenderer extends DisplayObjectRenderer
 		The current HTML5 DOM element
 	**/
 	@SuppressWarnings("checkstyle:Dynamic")
-	public var element:#if lime DOMRenderContext #else Dynamic #end;
+	public var element:#if (lime && !openfl_wgpu) DOMRenderContext #else Dynamic #end;
 
 	@:noCompletion private var __canvasRenderer:CanvasRenderer;
 	@:noCompletion private var __clipRects:Array<Rectangle>;
@@ -53,7 +53,7 @@ class DOMRenderer extends DisplayObjectRenderer
 	@:noCompletion private var __z:Int;
 
 	@SuppressWarnings("checkstyle:Dynamic")
-	@:noCompletion private function new(element:#if lime DOMRenderContext #else Dynamic #end)
+	@:noCompletion private function new(element:#if (lime && !openfl_wgpu) DOMRenderContext #else Dynamic #end)
 	{
 		super();
 

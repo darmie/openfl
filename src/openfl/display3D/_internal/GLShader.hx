@@ -1,7 +1,7 @@
 package openfl.display3D._internal;
 
 #if !flash
-#if lime
+#if (lime && !openfl_wgpu)
 typedef GLShader = lime.graphics.opengl.GLShader;
 #else
 typedef GLShader = Dynamic;

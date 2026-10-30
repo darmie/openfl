@@ -11,7 +11,9 @@ import openfl.errors.IllegalOperationError;
 import openfl.utils.ByteArray;
 import openfl.utils.Endian;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.opengl.GL;
+#end
 #end
 
 #if !openfl_debug

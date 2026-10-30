@@ -11,7 +11,9 @@ import openfl.events.EventDispatcher;
 import openfl.errors.Error;
 import openfl.utils._internal.Log;
 #if lime
+#if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil;
+#end
 import lime.graphics.Image;
 import lime.graphics.RenderContext;
 #end

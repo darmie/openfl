@@ -12,7 +12,9 @@ import openfl.display._internal.CanvasVideo;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.Canvas2DRenderContext;
+#end
 #end
 
 /**
@@ -38,13 +40,13 @@ class CanvasRenderer extends DisplayObjectRenderer
 		The current HTML5 canvas render context
 	**/
 	@SuppressWarnings("checkstyle:Dynamic")
-	public var context:#if lime Canvas2DRenderContext #else Dynamic #end;
+	public var context:#if (lime && !openfl_wgpu) Canvas2DRenderContext #else Dynamic #end;
 
 	@:noCompletion private var __isDOM:Bool;
 	@:noCompletion private var __tempMatrix:Matrix;
 
 	@SuppressWarnings("checkstyle:Dynamic")
-	@:noCompletion private function new(context:#if lime Canvas2DRenderContext #else Dynamic #end)
+	@:noCompletion private function new(context:#if (lime && !openfl_wgpu) Canvas2DRenderContext #else Dynamic #end)
 	{
 		super();
 
@@ -61,7 +63,7 @@ class CanvasRenderer extends DisplayObjectRenderer
 		Set whether smoothing should be enabled on a canvas context
 	**/
 	@SuppressWarnings("checkstyle:Dynamic")
-	public function applySmoothing(context:#if lime Canvas2DRenderContext #else Dynamic #end, value:Bool):Void
+	public function applySmoothing(context:#if (lime && !openfl_wgpu) Canvas2DRenderContext #else Dynamic #end, value:Bool):Void
 	{
 		context.imageSmoothingEnabled = value;
 	}
@@ -71,7 +73,7 @@ class CanvasRenderer extends DisplayObjectRenderer
 		context
 	**/
 	@SuppressWarnings("checkstyle:Dynamic")
-	public function setTransform(transform:Matrix, context:#if lime Canvas2DRenderContext #else Dynamic #end = null):Void
+	public function setTransform(transform:Matrix, context:#if (lime && !openfl_wgpu) Canvas2DRenderContext #else Dynamic #end = null):Void
 	{
 		if (context == null)
 		{
@@ -246,7 +248,7 @@ class CanvasRenderer extends DisplayObjectRenderer
 	}
 
 	@SuppressWarnings("checkstyle:Dynamic")
-	@:noCompletion private function __setBlendModeContext(context:#if lime Canvas2DRenderContext #else Dynamic #end, value:BlendMode):Void
+	@:noCompletion private function __setBlendModeContext(context:#if (lime && !openfl_wgpu) Canvas2DRenderContext #else Dynamic #end, value:BlendMode):Void
 	{
 		switch (value)
 		{

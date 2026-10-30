@@ -14,8 +14,10 @@ import openfl.geom.Point;
 import openfl.geom.Rectangle;
 import openfl.text.TextField;
 #if lime
+#if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil; // TODO
 import lime.graphics.cairo.Cairo;
+#end
 import lime.graphics.RenderContext;
 import lime.graphics.RenderContextType;
 #end

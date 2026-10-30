@@ -15,7 +15,9 @@ import openfl.text.TextFieldType;
 import openfl.text.TextFormat;
 import openfl.text.TextFormatAlign;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.cairo.CairoFontFace;
+#end
 import lime.system.System;
 #end
 #if sys
@@ -107,7 +109,7 @@ class TextEngine
 	// @:noCompletion private var __tilesheets:Map<Tilesheet, Bool>;
 	private var __useIntAdvances:Null<Bool>;
 
-	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion @:dox(hide) public var __cairoFont:#if lime CairoFontFace #else Dynamic #end;
+	@SuppressWarnings("checkstyle:Dynamic") @:noCompletion @:dox(hide) public var __cairoFont:#if (lime && !openfl_wgpu) CairoFontFace #else Dynamic #end;
 	@:noCompletion @:dox(hide) public var __font:Font;
 
 	public function new(textField:TextField)

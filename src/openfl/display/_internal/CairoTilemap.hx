@@ -11,9 +11,11 @@ import openfl.display.Tileset.TileData;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.cairo.CairoFilter;
 import lime.graphics.cairo.CairoPattern;
 import lime.graphics.cairo.CairoSurface;
+#end
 import lime.math.Matrix3;
 #end
 
@@ -59,7 +61,7 @@ class CairoTilemap
 	@SuppressWarnings("checkstyle:Dynamic")
 	private static function renderTileContainer(group:TileContainer, renderer:CairoRenderer, parentTransform:Matrix, defaultTileset:Tileset, smooth:Bool,
 			alphaEnabled:Bool, worldAlpha:Float, blendModeEnabled:Bool, defaultBlendMode:BlendMode, cacheBitmapData:BitmapData,
-			surface:#if lime CairoSurface #else Dynamic #end, pattern:#if lime CairoPattern #else Dynamic #end, rect:Rectangle,
+			surface:#if (lime && !openfl_wgpu) CairoSurface #else Dynamic #end, pattern:#if (lime && !openfl_wgpu) CairoPattern #else Dynamic #end, rect:Rectangle,
 			matrix:#if lime Matrix3 #else Dynamic #end):Void
 	{
 		#if lime

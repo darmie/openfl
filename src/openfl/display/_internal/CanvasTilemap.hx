@@ -11,7 +11,9 @@ import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 #if lime
 // TODO: Avoid use of private APIs
+#if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil;
+#end
 #end
 
 @:access(lime.graphics.ImageBuffer)

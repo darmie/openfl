@@ -2,7 +2,9 @@ package openfl.display._internal;
 
 #if !flash
 #if lime
+#if !openfl_wgpu
 import lime._internal.graphics.ImageCanvasUtil; // TODO
+#end
 
 #end
 @:access(openfl.display.BitmapData)

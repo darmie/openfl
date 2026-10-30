@@ -14,11 +14,13 @@ import openfl.geom.Point;
 import openfl.geom.Rectangle;
 import openfl.Vector;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.cairo.Cairo;
 import lime.graphics.cairo.CairoExtend;
 import lime.graphics.cairo.CairoFilter;
 import lime.graphics.cairo.CairoImageSurface;
 import lime.graphics.cairo.CairoPattern;
+#end
 import lime.math.Matrix3;
 import lime.math.Vector2;
 #end

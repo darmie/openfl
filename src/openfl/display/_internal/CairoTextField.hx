@@ -10,6 +10,7 @@ import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 import openfl.text.TextField;
 #if lime
+#if !openfl_wgpu
 import lime.graphics.cairo.Cairo;
 import lime.graphics.cairo.CairoAntialias;
 import lime.graphics.cairo.CairoFontOptions;
@@ -17,6 +18,7 @@ import lime.graphics.cairo.CairoFTFontFace;
 import lime.graphics.cairo.CairoGlyph;
 import lime.graphics.cairo.CairoHintMetrics;
 import lime.graphics.cairo.CairoHintStyle;
+#end
 #end
 
 #if !openfl_debug
