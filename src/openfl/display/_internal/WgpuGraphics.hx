@@ -2,18 +2,23 @@ package openfl.display._internal;
 
 #if (!flash && openfl_wgpu)
 import openfl.display.CapsStyle;
+import openfl.display.GradientType;
 import openfl.display.Graphics;
 import openfl.display.JointStyle;
+import openfl.display.SpreadMethod;
 import openfl.display.WgpuRenderer;
+import openfl.geom.Matrix;
 import puffpuff.canvas.Affine;
 import puffpuff.canvas.Canvas2D;
 import puffpuff.canvas.Paint;
+import puffpuff.canvas.Paint.PaintKind;
 import puffpuff.canvas.Path;
 import puffpuff.canvas.Stroke;
 
 /**
-	Draws the commands of a `Graphics` with `Canvas2D`: solid fills and solid line styles, with the
-	nonzero and even-odd rules. The fill and the stroke accumulate separate paths, because a line
+	Draws the commands of a `Graphics` with `Canvas2D`: solid and gradient fills and line styles, with the
+	nonzero and even-odd rules. Gradients take up to four stops, pad, reflect and repeat spreads and any
+	gradient matrix; the focal point and linearRGB interpolation are not applied. The fill and the stroke accumulate separate paths, because a line
 	style change ends the stroke segment but not the fill.
 **/
 @:access(openfl.display.Graphics)
@@ -35,6 +40,10 @@ class WgpuGraphics
 					var c = data.readBeginFill();
 					state.beginFill(c.color, c.alpha);
 
+				case BEGIN_GRADIENT_FILL:
+					var c = data.readBeginGradientFill();
+					state.beginPaint(WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod));
+
 				case END_FILL:
 					data.readEndFill();
 					state.endFill();
@@ -50,6 +59,10 @@ class WgpuGraphics
 				case LINE_STYLE:
 					var c = data.readLineStyle();
 					state.lineStyle(c.thickness, c.color, c.alpha, c.caps, c.joints, c.miterLimit);
+
+				case LINE_GRADIENT_STYLE:
+					var c = data.readLineGradientStyle();
+					state.strokePaint = WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod);
 
 				case MOVE_TO:
 					var c = data.readMoveTo();
@@ -93,9 +106,11 @@ class WgpuGraphics
 	}
 }
 
+@:allow(openfl.display._internal.WgpuGraphics)
 private class WgpuGraphicsState
 {
 	public var evenOdd:Bool = false;
+	public var strokePaint:Paint;
 
 	private var canvas:Canvas2D;
 	private var local:Affine;
@@ -103,7 +118,6 @@ private class WgpuGraphicsState
 	private var fillPaint:Paint;
 	private var fillPath:Path;
 	private var stroke:Stroke;
-	private var strokePaint:Paint;
 	private var strokePath:Path;
 	private var x:Float = 0;
 	private var y:Float = 0;
@@ -117,9 +131,49 @@ private class WgpuGraphicsState
 
 	public function beginFill(color:Int, fillAlpha:Float):Void
 	{
+		beginPaint(fillAlpha < 0.005 ? null : Paint.solid(color & 0xFFFFFF, fillAlpha));
+	}
+
+	public function beginPaint(paint:Paint):Void
+	{
 		flushFill();
-		fillPaint = fillAlpha < 0.005 ? null : Paint.solid(color & 0xFFFFFF, fillAlpha);
-		fillPath = fillPaint == null ? null : new Path().moveTo(x, y);
+		fillPaint = paint;
+		fillPath = paint == null ? null : new Path().moveTo(x, y);
+	}
+
+	/**
+		Gradient paint. The matrix maps the gradient box onto the shape. Linear runs along x from -819.2 to 819.2,
+		radial has radius 819.2.
+	**/
+	public static function gradient(type:GradientType, colors:Array<Int>, alphas:Array<Float>, ratios:Array<Int>, matrix:Matrix, spread:SpreadMethod):Paint
+	{
+		var stops = [];
+		for (i in 0...colors.length)
+		{
+			stops.push({offset: ratios[i] / 255, rgb: colors[i] & 0xFFFFFF, alpha: alphas[i]});
+		}
+
+		// A paint holds four stops. Keep first and last, spread the rest evenly.
+		if (stops.length > 4)
+		{
+			var picked = [];
+			for (i in 0...4) picked.push(stops[Math.round(i * (stops.length - 1) / 3)]);
+			stops = picked;
+		}
+
+		var radial = type == RADIAL;
+		var scale = radial ? 819.2 : 1638.4;
+		var shift = radial ? 0.0 : -819.2;
+		var unit = new Affine(scale, 0, 0, scale, shift, shift);
+		var box = matrix == null ? unit : new Affine(matrix.a, matrix.b, matrix.c, matrix.d, matrix.tx, matrix.ty).after(unit);
+		var spreadMode = switch (spread)
+		{
+			case REFLECT: 1;
+			case REPEAT: 2;
+			default: 0;
+		}
+
+		return Paint.boxed(radial ? Radial : Linear, box, stops, spreadMode);
 	}
 
 	public function endFill():Void
