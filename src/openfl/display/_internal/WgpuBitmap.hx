@@ -36,12 +36,14 @@ class WgpuBitmap
 		var bitmapData = bitmap.__bitmapData;
 		if (bitmapData == null || !bitmapData.__isValid || !bitmapData.readable) return;
 
-		var alpha = renderer.__getAlpha(bitmap.__worldAlpha);
+		var colorTransform = bitmap.__worldColorTransform;
+		var alpha = WgpuColor.alpha(renderer.__getAlpha(bitmap.__worldAlpha), colorTransform);
 		if (alpha <= 0) return;
 
 		var texture = WgpuBitmap.texture(bitmapData, renderer.__context.wgpu.context3D);
 		if (texture == null) return;
 
+		renderer.__setBlendMode(bitmap.__worldBlendMode);
 		renderer.__pushMaskObject(bitmap);
 
 		renderer.__beginQuads(texture, isPremultiplied(bitmapData), renderer.__allowSmoothing && bitmap.smoothing);
@@ -67,7 +69,7 @@ class WgpuBitmap
 
 		var width = bitmapData.width;
 		var height = bitmapData.height;
-		renderer.__quads.addQuad(a * width, b * width, c * height, d * height, tx, ty, 0, 0, 1, 1, alpha);
+		renderer.__quads.addQuad(a * width, b * width, c * height, d * height, tx, ty, 0, 0, 1, 1, alpha, WgpuColor.tint(colorTransform));
 		renderer.__popMaskObject(bitmap);
 	}
 

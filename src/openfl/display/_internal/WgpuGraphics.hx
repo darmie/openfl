@@ -8,6 +8,7 @@ import openfl.display.Graphics;
 import openfl.display.JointStyle;
 import openfl.display.SpreadMethod;
 import openfl.display.WgpuRenderer;
+import openfl.geom.ColorTransform;
 import openfl.geom.Matrix;
 import openfl.Vector;
 import puffpuff.canvas.Affine;
@@ -27,12 +28,12 @@ import puffpuff.canvas.Stroke;
 @:access(openfl.display.WgpuRenderer)
 class WgpuGraphics
 {
-	public static function render(graphics:Graphics, renderer:WgpuRenderer, local:Affine, alpha:Float):Void
+	public static function render(graphics:Graphics, renderer:WgpuRenderer, local:Affine, alpha:Float, colorTransform:ColorTransform = null):Void
 	{
 		var commands = graphics.__commands;
 		if (commands == null || commands.length == 0) return;
 
-		var state = new WgpuGraphicsState(renderer, local, alpha);
+		var state = new WgpuGraphicsState(renderer, local, alpha, colorTransform);
 		var data = new DrawCommandReader(commands);
 
 		for (type in commands.types)
@@ -45,7 +46,7 @@ class WgpuGraphics
 
 				case BEGIN_GRADIENT_FILL:
 					var c = data.readBeginGradientFill();
-					state.beginPaint(WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod));
+					state.beginPaint(WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod, colorTransform));
 
 				case BEGIN_BITMAP_FILL:
 					var c = data.readBeginBitmapFill();
@@ -73,7 +74,7 @@ class WgpuGraphics
 
 				case LINE_GRADIENT_STYLE:
 					var c = data.readLineGradientStyle();
-					state.strokePaint = WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod);
+					state.strokePaint = WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod, colorTransform);
 
 				case MOVE_TO:
 					var c = data.readMoveTo();
@@ -127,6 +128,7 @@ private class WgpuGraphicsState
 	private var renderer:WgpuRenderer;
 	private var canvas:Canvas2D;
 	private var local:Affine;
+	private var colorTransform:ColorTransform;
 	private var bitmap:BitmapData;
 	private var bitmapSmooth:Bool;
 	private var alpha:Float;
@@ -137,8 +139,9 @@ private class WgpuGraphicsState
 	private var x:Float = 0;
 	private var y:Float = 0;
 
-	public function new(renderer:WgpuRenderer, local:Affine, alpha:Float)
+	public function new(renderer:WgpuRenderer, local:Affine, alpha:Float, colorTransform:ColorTransform)
 	{
+		this.colorTransform = colorTransform;
 		this.renderer = renderer;
 		this.canvas = renderer.canvas;
 		this.local = local;
@@ -147,7 +150,7 @@ private class WgpuGraphicsState
 
 	public function beginFill(color:Int, fillAlpha:Float):Void
 	{
-		beginPaint(fillAlpha < 0.005 ? null : Paint.solid(color & 0xFFFFFF, fillAlpha));
+		beginPaint(fillAlpha < 0.005 ? null : Paint.solid(WgpuColor.rgb(color, colorTransform), fillAlpha));
 	}
 
 	public function beginPaint(paint:Paint):Void
@@ -161,12 +164,13 @@ private class WgpuGraphicsState
 		Gradient paint. The matrix maps the gradient box onto the shape. Linear runs along x from -819.2 to 819.2,
 		radial has radius 819.2.
 	**/
-	public static function gradient(type:GradientType, colors:Array<Int>, alphas:Array<Float>, ratios:Array<Int>, matrix:Matrix, spread:SpreadMethod):Paint
+	public static function gradient(type:GradientType, colors:Array<Int>, alphas:Array<Float>, ratios:Array<Int>, matrix:Matrix, spread:SpreadMethod,
+			colorTransform:ColorTransform = null):Paint
 	{
 		var stops = [];
 		for (i in 0...colors.length)
 		{
-			stops.push({offset: ratios[i] / 255, rgb: colors[i] & 0xFFFFFF, alpha: alphas[i]});
+			stops.push({offset: ratios[i] / 255, rgb: WgpuColor.rgb(colors[i], colorTransform), alpha: alphas[i]});
 		}
 
 		// A paint holds four stops. Keep first and last, spread the rest evenly.
@@ -238,6 +242,7 @@ private class WgpuGraphicsState
 
 		renderer.__beginQuads(texture, WgpuBitmap.isPremultiplied(bitmap), renderer.__allowSmoothing && bitmapSmooth);
 
+		var tint = WgpuColor.tint(colorTransform);
 		var invW = 1 / texture.width;
 		var invH = 1 / texture.height;
 		for (i in 0...length)
@@ -285,7 +290,7 @@ private class WgpuGraphicsState
 			var c = local.a * tc + local.c * td;
 			var d = local.b * tc + local.d * td;
 			renderer.__quads.addQuad(a * w, b * w, c * h, d * h, local.a * tx + local.c * ty + local.e, local.b * tx + local.d * ty + local.f, rects[ri] * invW,
-				rects[ri + 1] * invH, w * invW, h * invH, alpha);
+				rects[ri + 1] * invH, w * invW, h * invH, alpha, tint);
 		}
 	}
 
@@ -316,7 +321,7 @@ private class WgpuGraphicsState
 		}
 
 		stroke = new Stroke(thickness > 0 ? thickness : 1, cap, join, miterLimit);
-		strokePaint = Paint.solid(color & 0xFFFFFF, lineAlpha);
+		strokePaint = Paint.solid(WgpuColor.rgb(color, colorTransform), lineAlpha);
 		strokePath = new Path().moveTo(x, y);
 	}
 

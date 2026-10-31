@@ -3,6 +3,7 @@ package openfl.display._internal;
 #if (!flash && openfl_wgpu)
 import openfl.display.DisplayObject;
 import openfl.display.WgpuRenderer;
+import openfl.display._internal.WgpuColor;
 import puffpuff.canvas.Affine;
 
 @:access(openfl.display.DisplayObject)
@@ -15,7 +16,8 @@ class WgpuDisplayObject
 		var graphics = displayObject.__graphics;
 		if (graphics == null || !renderer.__canRender(displayObject)) return;
 
-		var alpha = renderer.__getAlpha(displayObject.__worldAlpha);
+		var colorTransform = displayObject.__worldColorTransform;
+		var alpha = WgpuColor.alpha(renderer.__getAlpha(displayObject.__worldAlpha), colorTransform);
 		if (alpha <= 0) return;
 
 		var transform = displayObject.__renderTransform;
@@ -26,9 +28,10 @@ class WgpuDisplayObject
 			local = new Affine(world.a, world.b, world.c, world.d, world.tx, world.ty).after(local);
 		}
 
+		renderer.__setBlendMode(displayObject.__worldBlendMode);
 		renderer.__pushMaskObject(displayObject);
 		renderer.__beginVectors();
-		WgpuGraphics.render(graphics, renderer, local, alpha);
+		WgpuGraphics.render(graphics, renderer, local, alpha, colorTransform);
 		renderer.__popMaskObject(displayObject);
 	}
 }

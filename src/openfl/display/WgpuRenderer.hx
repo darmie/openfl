@@ -86,11 +86,13 @@ class WgpuRenderer extends DisplayObjectRenderer
 		__vectorsOpen = false;
 		__quadsOpen = false;
 		__numClipRects = 0;
+		__blendMode = NORMAL;
 		__maskObjects = [];
 		__maskTargets = [];
 		__target = null;
 		__context.wgpu.context3D.disableScissor();
 		__renderDrawable(object);
+		__setBlendMode(NORMAL);
 		__flush();
 		__context.wgpu.context3D.disableScissor();
 	}
@@ -159,6 +161,78 @@ class WgpuRenderer extends DisplayObjectRenderer
 	}
 
 	/** Draws `texture`, the size of the target, over the whole target. **/
+	@:noCompletion private override function __setBlendMode(value:BlendMode):Void
+	{
+		if (value == null) value = NORMAL;
+
+		if (__blendMode != value)
+		{
+			__flush();
+			__blendMode = value;
+		}
+	}
+
+	@:noCompletion private function __saveBlend(context3D:puffpuff.gpu.WgpuContext3D):Array<Int>
+	{
+		return [context3D.srcRgb, context3D.dstRgb, context3D.opRgb, context3D.srcAlpha, context3D.dstAlpha, context3D.opAlpha];
+	}
+
+	@:noCompletion private function __restoreBlend(context3D:puffpuff.gpu.WgpuContext3D, saved:Array<Int>):Void
+	{
+		context3D.srcRgb = saved[0];
+		context3D.dstRgb = saved[1];
+		context3D.opRgb = saved[2];
+		context3D.srcAlpha = saved[3];
+		context3D.dstAlpha = saved[4];
+		context3D.opAlpha = saved[5];
+	}
+
+	/**
+		Sets the blend factors for the current blend mode. `premultiplied` is whether the source color is already
+		multiplied by alpha. Overlay, hard light, difference and invert aren't supported, draw as normal.
+	**/
+	@:noCompletion private function __applyBlendMode(context3D:puffpuff.gpu.WgpuContext3D, premultiplied:Bool):Void
+	{
+		var source:gpu.BlendFactor = premultiplied ? gpu.BlendFactor.One : gpu.BlendFactor.SrcAlpha;
+
+		switch (__blendMode)
+		{
+			case ADD:
+				context3D.srcRgb = source;
+				context3D.dstRgb = gpu.BlendFactor.One;
+			case MULTIPLY:
+				context3D.srcRgb = gpu.BlendFactor.Dst;
+				context3D.dstRgb = gpu.BlendFactor.OneMinusSrcAlpha;
+			case SCREEN:
+				context3D.srcRgb = source;
+				context3D.dstRgb = gpu.BlendFactor.OneMinusSrc;
+			case SUBTRACT:
+				context3D.opRgb = gpu.BlendOperation.ReverseSubtract;
+				context3D.srcRgb = source;
+				context3D.dstRgb = gpu.BlendFactor.One;
+			case DARKEN:
+				context3D.opRgb = gpu.BlendOperation.Min;
+				context3D.srcRgb = gpu.BlendFactor.One;
+				context3D.dstRgb = gpu.BlendFactor.One;
+			case LIGHTEN:
+				context3D.opRgb = gpu.BlendOperation.Max;
+				context3D.srcRgb = gpu.BlendFactor.One;
+				context3D.dstRgb = gpu.BlendFactor.One;
+			case ERASE:
+				context3D.srcRgb = gpu.BlendFactor.Zero;
+				context3D.dstRgb = gpu.BlendFactor.OneMinusSrcAlpha;
+				context3D.srcAlpha = gpu.BlendFactor.Zero;
+				context3D.dstAlpha = gpu.BlendFactor.OneMinusSrcAlpha;
+			case ALPHA:
+				context3D.srcRgb = gpu.BlendFactor.Zero;
+				context3D.dstRgb = gpu.BlendFactor.SrcAlpha;
+				context3D.srcAlpha = gpu.BlendFactor.Zero;
+				context3D.dstAlpha = gpu.BlendFactor.SrcAlpha;
+			default:
+				context3D.srcRgb = source;
+		}
+	}
+
 	/** Whether to draw `object`. Skips hidden objects and masks, unless the mask itself is drawn as coverage. **/
 	@:noCompletion private inline function __canRender(object:DisplayObject):Bool
 	{
@@ -260,33 +334,41 @@ class WgpuRenderer extends DisplayObjectRenderer
 	{
 		if (__vectorsOpen)
 		{
+			var context3D = __context.wgpu.context3D;
+			var saved = __saveBlend(context3D);
+			// Premultiplied color, so half-covered edge pixels blend by half. Darken and lighten compare colors
+			// regardless of coverage, so they use straight color.
+			var premultiplied = switch (__blendMode)
+			{
+				case ADD, MULTIPLY, SCREEN, SUBTRACT: true;
+				default: false;
+			}
+			__applyBlendMode(context3D, premultiplied);
+			context3D.vectorsPremultiplied = premultiplied;
 			canvas.flush(__projection);
+			context3D.vectorsPremultiplied = false;
+			__restoreBlend(context3D, saved);
 			__vectorsOpen = false;
 		}
 
 		if (__quadsOpen)
 		{
 			var context3D = __context.wgpu.context3D;
-			var srcRgb = context3D.srcRgb;
-			var dstRgb = context3D.dstRgb;
-			var srcAlpha = context3D.srcAlpha;
-			var dstAlpha = context3D.dstAlpha;
+			var saved = __saveBlend(context3D);
 			var smoothing = context3D.smoothing;
 
-			// Multiplying: the destination is scaled by the source's alpha and the source adds nothing, which is how a
-			// mask's coverage takes away what it does not cover.
 			if (__quadsMultiply)
 			{
+				// Multiply scales destination by source alpha and adds nothing, so mask coverage removes whatever it
+				// doesn't cover.
 				context3D.srcRgb = gpu.BlendFactor.Zero;
 				context3D.dstRgb = gpu.BlendFactor.SrcAlpha;
 				context3D.srcAlpha = gpu.BlendFactor.Zero;
 				context3D.dstAlpha = gpu.BlendFactor.SrcAlpha;
 			}
-
-			// Premultiplied colour is added as it is; straight colour is scaled by its alpha.
-			if (__quadsPremultiplied)
+			else
 			{
-				context3D.srcRgb = gpu.BlendFactor.One;
+				__applyBlendMode(context3D, __quadsPremultiplied);
 			}
 
 			context3D.quadsPremultiplied = __quadsPremultiplied;
@@ -294,10 +376,7 @@ class WgpuRenderer extends DisplayObjectRenderer
 			__quads.flush(__projection);
 			context3D.quadsPremultiplied = false;
 			context3D.smoothing = smoothing;
-			context3D.srcRgb = srcRgb;
-			context3D.dstRgb = dstRgb;
-			context3D.srcAlpha = srcAlpha;
-			context3D.dstAlpha = dstAlpha;
+			__restoreBlend(context3D, saved);
 			__quadsOpen = false;
 		}
 	}

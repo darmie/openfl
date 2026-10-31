@@ -31,7 +31,8 @@ class WgpuTextField
 
 		if (!renderer.__canRender(textField)) return;
 
-		var alpha = renderer.__getAlpha(textField.__worldAlpha);
+		var colorTransform = textField.__worldColorTransform;
+		var alpha = WgpuColor.alpha(renderer.__getAlpha(textField.__worldAlpha), colorTransform);
 		if (alpha <= 0) return;
 
 		var textEngine = textField.__textEngine;
@@ -54,6 +55,7 @@ class WgpuTextField
 			ty = nty;
 		}
 
+		renderer.__setBlendMode(textField.__worldBlendMode);
 		renderer.__pushMaskObject(textField);
 
 		var useTextBounds = !(textEngine.background || textEngine.border);
@@ -66,12 +68,12 @@ class WgpuTextField
 			var box = new Path().rect(0.5, 0.5, bounds.width - 1, bounds.height - 1);
 			if (textEngine.background)
 			{
-				renderer.canvas.fill(box, Paint.solid(textEngine.backgroundColor & 0xFFFFFF), NonZero, local, alpha);
+				renderer.canvas.fill(box, Paint.solid(WgpuColor.rgb(textEngine.backgroundColor, colorTransform)), NonZero, local, alpha);
 			}
 
 			if (textEngine.border)
 			{
-				renderer.canvas.stroke(box, new Stroke(1), Paint.solid(textEngine.borderColor & 0xFFFFFF), local, alpha);
+				renderer.canvas.stroke(box, new Stroke(1), Paint.solid(WgpuColor.rgb(textEngine.borderColor, colorTransform)), local, alpha);
 			}
 		}
 
@@ -107,7 +109,7 @@ class WgpuTextField
 			var localX = group.offsetX + scrollX;
 			var localY = group.offsetY + scrollY;
 			font.drawText(renderer.__quads, text.substring(group.startIndex, group.endIndex), a * localX + c * localY + tx, b * localX + d * localY + ty,
-				group.format.size * scale, group.format.color & 0xFFFFFF, alpha, {
+				group.format.size * scale, WgpuColor.rgb(group.format.color, colorTransform), alpha, {
 					letterSpacing: group.format.letterSpacing != null ? group.format.letterSpacing * scale : null,
 					hinted: hinted
 				});

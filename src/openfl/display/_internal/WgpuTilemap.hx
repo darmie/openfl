@@ -33,9 +33,11 @@ class WgpuTilemap
 	{
 		if (!renderer.__canRender(tilemap) || tilemap.__group.__tiles.length == 0) return;
 
-		var alpha = renderer.__getAlpha(tilemap.__worldAlpha);
+		var colorTransform = tilemap.__worldColorTransform;
+		var alpha = WgpuColor.alpha(renderer.__getAlpha(tilemap.__worldAlpha), colorTransform);
 		if (alpha <= 0) return;
 
+		renderer.__setBlendMode(tilemap.__worldBlendMode);
 		renderer.__pushMaskObject(tilemap);
 
 		var rect = Rectangle.__pool.get();
@@ -47,7 +49,7 @@ class WgpuTilemap
 		if (renderer.__worldTransform != null) parent.concat(renderer.__worldTransform);
 
 		renderTileContainer(tilemap.__group, renderer, parent, tilemap.__tileset, renderer.__allowSmoothing && tilemap.smoothing, tilemap.tileAlphaEnabled, alpha,
-			rect);
+			rect, WgpuColor.tint(colorTransform));
 
 		Matrix.__pool.release(parent);
 		renderer.__popMaskRect();
@@ -56,7 +58,7 @@ class WgpuTilemap
 	}
 
 	private static function renderTileContainer(group:TileContainer, renderer:WgpuRenderer, parentTransform:Matrix, defaultTileset:Tileset, smooth:Bool,
-			alphaEnabled:Bool, worldAlpha:Float, rect:Rectangle):Void
+			alphaEnabled:Bool, worldAlpha:Float, rect:Rectangle, tint:Int):Void
 	{
 		var context3D = renderer.__context.wgpu.context3D;
 		var tileTransform = Matrix.__pool.get();
@@ -78,7 +80,7 @@ class WgpuTilemap
 
 			if (tile.__length > 0)
 			{
-				renderTileContainer(cast tile, renderer, tileTransform, tileset, smooth, alphaEnabled, alpha, rect);
+				renderTileContainer(cast tile, renderer, tileTransform, tileset, smooth, alphaEnabled, alpha, rect, tint);
 				continue;
 			}
 
@@ -111,7 +113,7 @@ class WgpuTilemap
 			var invW = 1 / texture.width;
 			var invH = 1 / texture.height;
 			renderer.__quads.addQuad(tileTransform.a * w, tileTransform.b * w, tileTransform.c * h, tileTransform.d * h, tileTransform.tx, tileTransform.ty,
-				tileRect.x * invW, tileRect.y * invH, w * invW, h * invH, alpha);
+				tileRect.x * invW, tileRect.y * invH, w * invW, h * invH, alpha, tint);
 		}
 
 		Matrix.__pool.release(tileTransform);
