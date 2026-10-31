@@ -25,7 +25,8 @@ import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 	Draws `Graphics` commands with `Canvas2D`: solid and gradient fills and line styles, nonzero and even-odd.
 	`drawQuads`, `drawTriangles` and bitmap-filled rectangles use textured quads and triangles. Gradients: four stops,
 	pad/reflect/repeat, any matrix, no focal point or linearRGB. Fill and stroke keep separate paths, since a line style
-	change ends the stroke segment but not the fill.
+	change ends the stroke segment but not the fill. `scale9Grid` keeps the nine regions of paths and strokes; bitmap fills,
+	gradients, triangles and quads scale as a whole.
 **/
 @:access(openfl.display.Graphics)
 @:access(openfl.display.WgpuRenderer)
@@ -37,6 +38,7 @@ class WgpuGraphics
 		if (commands == null || commands.length == 0) return;
 
 		var state = new WgpuGraphicsState(renderer, local, alpha, colorTransform);
+		if (!state.useScale9Grid(graphics)) return;
 		var data = new DrawCommandReader(commands);
 
 		for (type in commands.types)
@@ -125,6 +127,8 @@ class WgpuGraphics
 	}
 }
 
+@:access(openfl.display.DisplayObject)
+@:access(openfl.display.Graphics)
 @:access(openfl.display.WgpuRenderer)
 @:allow(openfl.display._internal.WgpuGraphics)
 private class WgpuGraphicsState
@@ -135,6 +139,9 @@ private class WgpuGraphicsState
 	private var renderer:WgpuRenderer;
 	private var canvas:Canvas2D;
 	private var local:Affine;
+	/** The transform of fills and strokes: `local`, or with the object's own scale taken out when `scale9` maps the points. **/
+	private var pathLocal:Affine;
+	private var scale9:Null<Scale9Map>;
 	private var colorTransform:ColorTransform;
 	private var bitmap:BitmapData;
 	private var bitmapSmooth:Bool;
@@ -155,8 +162,35 @@ private class WgpuGraphicsState
 		this.renderer = renderer;
 		this.canvas = renderer.canvas;
 		this.local = local;
+		this.pathLocal = local;
 		this.alpha = alpha;
 	}
+
+	/**
+		Sets up the grid of a display object that has one, which isn't for masks or for a rotation of 0.02 degrees or more.
+		False if the object is scaled to nothing, and draws nothing.
+	**/
+	public function useScale9Grid(graphics:Graphics):Bool
+	{
+		var owner = graphics.__owner;
+		var grid = owner.__scale9Grid;
+		var bounds = graphics.__bounds;
+		if (grid == null || bounds == null || owner.__isMask || Math.abs(owner.__rotation) >= 0.02) return true;
+
+		var scaleX = owner.scaleX;
+		var scaleY = owner.scaleY;
+		if (scaleX == 0 || scaleY == 0) return false;
+
+		scale9 = new Scale9Map(grid, bounds, Math.abs(scaleX), Math.abs(scaleY));
+		pathLocal = local.after(Affine.scaling(1 / Math.abs(scaleX), 1 / Math.abs(scaleY)));
+		return true;
+	}
+
+	private inline function mapX(px:Float):Float
+		return scale9 == null ? px : scale9.x(px);
+
+	private inline function mapY(py:Float):Float
+		return scale9 == null ? py : scale9.y(py);
 
 	public function beginFill(color:Int, fillAlpha:Float):Void
 	{
@@ -481,6 +515,8 @@ private class WgpuGraphicsState
 
 	public function moveTo(px:Float, py:Float):Void
 	{
+		px = mapX(px);
+		py = mapY(py);
 		if (fillPath != null) fillPath.moveTo(px, py);
 		if (strokePath != null) strokePath.moveTo(px, py);
 		x = px;
@@ -489,6 +525,8 @@ private class WgpuGraphicsState
 
 	public function lineTo(px:Float, py:Float):Void
 	{
+		px = mapX(px);
+		py = mapY(py);
 		if (fillPath != null) fillPath.lineTo(px, py);
 		if (strokePath != null) strokePath.lineTo(px, py);
 		x = px;
@@ -497,6 +535,10 @@ private class WgpuGraphicsState
 
 	public function curveTo(cx:Float, cy:Float, ax:Float, ay:Float):Void
 	{
+		cx = mapX(cx);
+		cy = mapY(cy);
+		ax = mapX(ax);
+		ay = mapY(ay);
 		if (fillPath != null) fillPath.quadTo(cx, cy, ax, ay);
 		if (strokePath != null) strokePath.quadTo(cx, cy, ax, ay);
 		x = ax;
@@ -505,6 +547,12 @@ private class WgpuGraphicsState
 
 	public function cubicCurveTo(c1x:Float, c1y:Float, c2x:Float, c2y:Float, ax:Float, ay:Float):Void
 	{
+		c1x = mapX(c1x);
+		c1y = mapY(c1y);
+		c2x = mapX(c2x);
+		c2y = mapY(c2y);
+		ax = mapX(ax);
+		ay = mapY(ay);
 		if (fillPath != null) fillPath.cubicTo(c1x, c1y, c2x, c2y, ax, ay);
 		if (strokePath != null) strokePath.cubicTo(c1x, c1y, c2x, c2y, ax, ay);
 		x = ax;
@@ -519,25 +567,39 @@ private class WgpuGraphicsState
 			bitmapRect(rx, ry, w, h);
 		}
 
-		if (fillPath != null) fillPath.rect(rx, ry, w, h);
-		if (strokePath != null) strokePath.rect(rx, ry, w, h);
-		x = rx;
-		y = ry;
+		var x1 = mapX(rx);
+		var y1 = mapY(ry);
+		var x2 = mapX(rx + w);
+		var y2 = mapY(ry + h);
+		if (fillPath != null) fillPath.rect(x1, y1, x2 - x1, y2 - y1);
+		if (strokePath != null) strokePath.rect(x1, y1, x2 - x1, y2 - y1);
+		x = x1;
+		y = y1;
 	}
 
 	public function drawRoundRect(rx:Float, ry:Float, w:Float, h:Float, ellipseWidth:Float, ellipseHeight:Null<Float>):Void
 	{
+		var x1 = mapX(rx);
+		var y1 = mapY(ry);
+		w = mapX(rx + w) - x1;
+		h = mapY(ry + h) - y1;
 		var radiusX = Math.min(ellipseWidth / 2, w / 2);
 		var radiusY = Math.min((ellipseHeight == null ? ellipseWidth : ellipseHeight) / 2, h / 2);
 
-		if (fillPath != null) roundRect(fillPath, rx, ry, w, h, radiusX, radiusY);
-		if (strokePath != null) roundRect(strokePath, rx, ry, w, h, radiusX, radiusY);
-		x = rx + w;
-		y = ry + h - radiusY;
+		if (fillPath != null) roundRect(fillPath, x1, y1, w, h, radiusX, radiusY);
+		if (strokePath != null) roundRect(strokePath, x1, y1, w, h, radiusX, radiusY);
+		x = x1 + w;
+		y = y1 + h - radiusY;
 	}
 
 	public function drawCircle(cx:Float, cy:Float, radius:Float):Void
 	{
+		if (scale9 != null)
+		{
+			drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2);
+			return;
+		}
+
 		if (fillPath != null) fillPath.circle(cx, cy, radius);
 		if (strokePath != null) strokePath.circle(cx, cy, radius);
 		x = cx + radius;
@@ -546,6 +608,24 @@ private class WgpuGraphicsState
 
 	public function drawEllipse(ex:Float, ey:Float, w:Float, h:Float):Void
 	{
+		if (scale9 != null)
+		{
+			// Four cubic arcs, so each control point is mapped on its own.
+			var k = 0.5522847498307936;
+			var cx = ex + w / 2;
+			var cy = ey + h / 2;
+			var rx = w / 2;
+			var ry = h / 2;
+			moveTo(cx + rx, cy);
+			cubicCurveTo(cx + rx, cy + ry * k, cx + rx * k, cy + ry, cx, cy + ry);
+			cubicCurveTo(cx - rx * k, cy + ry, cx - rx, cy + ry * k, cx - rx, cy);
+			cubicCurveTo(cx - rx, cy - ry * k, cx - rx * k, cy - ry, cx, cy - ry);
+			cubicCurveTo(cx + rx * k, cy - ry, cx + rx, cy - ry * k, cx + rx, cy);
+			if (fillPath != null) fillPath.close();
+			if (strokePath != null) strokePath.close();
+			return;
+		}
+
 		if (fillPath != null) fillPath.ellipse(ex + w / 2, ey + h / 2, w / 2, h / 2);
 		if (strokePath != null) strokePath.ellipse(ex + w / 2, ey + h / 2, w / 2, h / 2);
 		x = ex + w;
@@ -563,7 +643,7 @@ private class WgpuGraphicsState
 		if (fillPaint == null || fillPath == null) return;
 
 		renderer.__beginVectors();
-		canvas.fill(fillPath, fillPaint, evenOdd ? EvenOdd : NonZero, local, alpha);
+		canvas.fill(fillPath, fillPaint, evenOdd ? EvenOdd : NonZero, pathLocal, alpha);
 		fillPath = new Path().moveTo(x, y);
 	}
 
@@ -572,7 +652,7 @@ private class WgpuGraphicsState
 		if (stroke == null || strokePath == null) return;
 
 		renderer.__beginVectors();
-		canvas.stroke(strokePath, stroke, strokePaint, local, alpha);
+		canvas.stroke(strokePath, stroke, strokePaint, pathLocal, alpha);
 		strokePath = new Path().moveTo(x, y);
 	}
 
@@ -588,6 +668,64 @@ private class WgpuGraphicsState
 			.lineTo(rx, ry + radiusY)
 			.arcTo(radiusX, radiusY, 0, false, true, rx + radiusX, ry)
 			.close();
+	}
+}
+
+/**
+	Where `scale9Grid` moves a point: the corners keep their size, the edges and the center take up the rest, along each axis
+	on its own. Positions are measured from the graphics' bounds.
+**/
+private class Scale9Map
+{
+	private var left:Float;
+	private var centerWidth:Float;
+	private var width:Float;
+	private var scaleX:Float;
+	private var top:Float;
+	private var centerHeight:Float;
+	private var height:Float;
+	private var scaleY:Float;
+	private var originX:Float;
+	private var originY:Float;
+
+	public function new(grid:openfl.geom.Rectangle, bounds:openfl.geom.Rectangle, scaleX:Float, scaleY:Float)
+	{
+		originX = bounds.x;
+		originY = bounds.y;
+		left = grid.x - bounds.x;
+		centerWidth = grid.width;
+		width = bounds.width;
+		this.scaleX = scaleX;
+		top = grid.y - bounds.y;
+		centerHeight = grid.height;
+		height = bounds.height;
+		this.scaleY = scaleY;
+	}
+
+	public function x(px:Float):Float
+		return originX + map(px - originX, left, centerWidth, width, scaleX);
+
+	public function y(py:Float):Float
+		return originY + map(py - originY, top, centerHeight, height, scaleY);
+
+	private static function map(pos:Float, start:Float, center:Float, size:Float, scale:Float):Float
+	{
+		var end = size - center - start;
+		var scaledCenter = size * scale - start - end;
+		if (pos <= start)
+		{
+			// Corner or edge before the center; squeezed when there is no room for the center.
+			return scaledCenter < 0 ? pos * (start + end + scaledCenter) / (start + end) : pos;
+		}
+
+		if (pos >= start + center)
+		{
+			if (scaledCenter < 0) return (start + (pos - start - center)) * (start + end + scaledCenter) / (start + end);
+			return start + scaledCenter + (pos - start - center);
+		}
+
+		if (scaledCenter < 0) return start * (start + end + scaledCenter) / (start + end);
+		return start + scaledCenter * (pos - start) / center;
 	}
 }
 #end
