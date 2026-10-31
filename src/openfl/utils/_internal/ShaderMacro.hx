@@ -99,6 +99,11 @@ class ShaderMacro
 			parent = parent.superClass != null ? parent.superClass.t.get() : null;
 		}
 
+		#if openfl_wgpu
+		// Find an HXSL shader's parameters the way a GLSL shader's are found, from declarations in the fragment source.
+		if (glFragmentSource != null) glFragmentSource += hxslDeclarations(fields, localClass, glFragmentSource + glFragmentHeader + glVertexHeader);
+		#end
+
 		if (glVertexSource != null || glFragmentSource != null)
 		{
 			if (glFragmentSource != null && glFragmentHeader != null && glFragmentBody != null)
@@ -197,6 +202,74 @@ class ShaderMacro
 
 		return fields;
 	}
+
+	#if openfl_wgpu
+	/**
+		`uniform` declarations for the `@param`s in an HXSL class's own `SRC`. Not compiled for GLSL. They give the
+		class fields for the parameters and let Shader build its ShaderParameter and ShaderInput objects.
+	**/
+	private static function hxslDeclarations(fields:Array<Field>, localClass:ClassType, declared:String):String
+	{
+		var source:Expr = null;
+
+		for (field in fields)
+		{
+			if (field.name == "SRC")
+			{
+				switch (field.kind)
+				{
+					case FVar(_, e):
+						source = e;
+					default:
+				}
+			}
+		}
+
+		if (source == null && localClass.meta.has(":src")) source = localClass.meta.extract(":src")[0].params[0];
+		if (source == null) return "";
+
+		var out = "";
+
+		function visit(e:Expr):Void
+		{
+			switch (e.expr)
+			{
+				case EMeta({name: "param"}, {expr: EVars(vars)}):
+					for (v in vars)
+					{
+						var type = switch (v.type)
+						{
+							case TPath({name: name}):
+								switch (name)
+								{
+									case "Float": "float";
+									case "Vec2": "vec2";
+									case "Vec3": "vec3";
+									case "Vec4": "vec4";
+									case "Mat3": "mat3";
+									case "Mat4": "mat4";
+									case "Sampler2D": "sampler2D";
+									default: null;
+								}
+							default: null;
+						}
+
+						if (type == null) continue;
+						if (new EReg("uniform\\s+[A-Za-z0-9]+\\s+" + v.name + "\\b", "").match(declared + out)) continue;
+						out += "\nuniform " + type + " " + v.name + ";";
+					}
+
+				case EBlock(list):
+					for (item in list) visit(item);
+
+				default:
+			}
+		}
+
+		visit(source);
+		return out;
+	}
+	#end
 
 	private static function processFields(source:String, storageType:String, fields:Array<Field>, pos:Position):Void
 	{

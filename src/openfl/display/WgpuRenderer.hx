@@ -12,6 +12,7 @@ import openfl.geom.ColorTransform;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 import puffpuff.canvas.Canvas2D;
+import puffpuff.gpu.CustomQuadShader;
 import puffpuff.gpu.QuadBatcher;
 import puffpuff.gpu.TriangleBatcher;
 import puffpuff.gpu.WgpuContext3D.WgpuTexture;
@@ -541,17 +542,23 @@ class WgpuRenderer extends DisplayObjectRenderer
 	}
 
 	/**
-		Opens a batch of quads with a colour transform on `texture`, as `__beginQuads` does for plain ones.
+		Opens a batch of quads with a color transform, like `__beginQuads`. `custom` HXSL shader replaces the stock
+		fragment stage, and `params` holds its parameters.
 	**/
-	@:noCompletion private function __beginOffsetQuads(texture:WgpuTexture, premultiplied:Bool, smooth:Bool):Void
+	@:noCompletion private function __beginOffsetQuads(texture:WgpuTexture, premultiplied:Bool, smooth:Bool, custom:CustomQuadShader = null,
+			params:haxe.io.Bytes = null):Void
 	{
 		if (__offsetQuadsOpen
 			&& __offsetQuads.texture == texture
 			&& __offsetQuadsPremultiplied == premultiplied
-			&& __offsetQuadsSmooth == smooth) return;
+			&& __offsetQuadsSmooth == smooth
+			&& __offsetQuads.custom == custom
+			&& (params == null ? __offsetQuads.params == null : (__offsetQuads.params != null && __offsetQuads.params.compare(params) == 0))) return;
 
 		__flush();
 		__offsetQuads.begin(texture);
+		__offsetQuads.custom = custom;
+		__offsetQuads.params = params;
 		__offsetQuadsPremultiplied = premultiplied;
 		__offsetQuadsSmooth = smooth;
 		__offsetQuadsOpen = true;

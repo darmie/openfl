@@ -20,6 +20,7 @@ import puffpuff.canvas.Paint;
 import puffpuff.canvas.Paint.PaintKind;
 import puffpuff.canvas.Path;
 import puffpuff.canvas.Stroke;
+import puffpuff.gpu.CustomQuadShader;
 import puffpuff.gpu.TriangleBatcher;
 import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 
@@ -365,6 +366,7 @@ private class WgpuGraphicsState
 	private var bitmapRepeat:Bool;
 	private var bitmapMatrix:Matrix;
 	private var shaderBuffer:ShaderBuffer;
+	private var customShader:CustomQuadShader;
 	private var paramLength:Int;
 	private var solidRgba:Int;
 	private var alpha:Float;
@@ -425,6 +427,7 @@ private class WgpuGraphicsState
 		flushFill();
 		bitmap = null;
 		shaderBuffer = null;
+		customShader = null;
 		solidRgba = 0;
 		fillPaint = paint;
 		fillPath = paint == null ? null : new Path().moveTo(x, y);
@@ -465,11 +468,13 @@ private class WgpuGraphicsState
 		fillPath = null;
 		bitmap = null;
 		shaderBuffer = null;
+		customShader = null;
 	}
 
 	/**
-		A shader fill draws its `bitmap` input, so a stock or Flixel shader's quads and triangles are textured; the shader's
-		own code is not run. A quad takes the `alpha`, `colorMultiplier` and `colorOffset` values the shader holds for it.
+		Starts a shader fill drawing the shader's `bitmap` input. Stock and Flixel shaders aren't run. A shader with
+		HXSL source draws its quads with that source. Each quad gets the shader's `alpha`, `colorMultiplier` and
+		`colorOffset` values.
 	**/
 	public function beginShaderFill(buffer:ShaderBuffer):Void
 	{
@@ -485,8 +490,28 @@ private class WgpuGraphicsState
 			bitmapRepeat = false;
 			bitmapSmooth = buffer.inputFilter[i] != Context3DTextureFilter.NEAREST;
 			shaderBuffer = buffer;
+			customShader = buffer.shader != null ? CustomQuadShader.of(Type.getClass(buffer.shader)) : null;
 			break;
 		}
+	}
+
+	/** Custom shader's uniform block, each parameter at the offset its class declares. **/
+	private function customParams():haxe.io.Bytes
+	{
+		var block = customShader.block();
+		var bools = shaderBuffer.paramBoolCount;
+		var floats = shaderBuffer.paramFloatCount;
+		for (i in 0...shaderBuffer.paramCount)
+		{
+			var name = i < bools ? shaderBuffer.paramRefs_Bool[i].name : (i < bools + floats ? shaderBuffer.paramRefs_Float[i - bools].name : shaderBuffer.paramRefs_Int[i - bools - floats].name);
+			var at = customShader.offsetOf(name);
+			if (at < 0) continue;
+
+			var from = shaderBuffer.paramPositions[i];
+			for (j in 0...shaderBuffer.paramLengths[i]) block.setFloat(at + j * 4, shaderBuffer.paramData[from + j]);
+		}
+
+		return block;
 	}
 
 	/** Where parameter `name` starts in the buffer's values, or -1. Sets `paramLength` to its count. **/
@@ -713,8 +738,8 @@ private class WgpuGraphicsState
 		}
 
 		// Multipliers up to 1 work as a tint. Offset, or multiplier above 1, needs the transform in the shader.
-		var offsets = false;
-		if (multiplyAt >= 0)
+		var offsets = customShader != null;
+		if (multiplyAt >= 0 && !offsets)
 		{
 			for (i in 0...length)
 			{
@@ -736,7 +761,7 @@ private class WgpuGraphicsState
 
 		var premultiplied = WgpuBitmap.isPremultiplied(bitmap);
 		var smooth = renderer.__allowSmoothing && bitmapSmooth;
-		if (offsets) renderer.__beginOffsetQuads(texture, premultiplied, smooth);
+		if (offsets) renderer.__beginOffsetQuads(texture, premultiplied, smooth, customShader, customShader != null ? customParams() : null);
 		else renderer.__beginQuads(texture, premultiplied, smooth);
 
 		var objectR = colorTransform != null ? colorTransform.redMultiplier : 1.0;
