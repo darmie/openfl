@@ -33,6 +33,11 @@ import openfl.utils.ByteArray;
 		// __format = format;
 		__optimizeForRenderToTexture = optimizeForRenderToTexture;
 
+		#if openfl_wgpu
+		__wgpuTexture = context.__wgpu.createTexture(width, height, gpu.TextureFormat.Bgra8unorm);
+		return;
+		#end
+
 		__textureTarget = __context.gl.TEXTURE_2D;
 		uploadFromTypedArray(null);
 
@@ -113,6 +118,11 @@ import openfl.utils.ByteArray;
 	**/
 	public function uploadFromTypedArray(data:ArrayBufferView):Void
 	{
+		#if openfl_wgpu
+		if (data != null) __wgpuTexture.uploadLevel(0, data.buffer.sub(data.byteOffset, data.byteLength));
+		return;
+		#end
+
 		var gl = __context.gl;
 
 		__context.__bindGLTexture2D(__textureID);

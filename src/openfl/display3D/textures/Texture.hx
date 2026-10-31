@@ -42,7 +42,9 @@ import openfl.utils.ByteArray;
 		__streamingLevels = streamingLevels;
 
 		#if openfl_wgpu
-		__wgpuTexture = context.__wgpu.createTexture(width, height, gpu.TextureFormat.Bgra8unorm);
+		// A full chain, so a level can be uploaded and sampled; a texture drawn into keeps only the top level.
+		__wgpuTexture = context.__wgpu.createTexture(width, height, gpu.TextureFormat.Bgra8unorm,
+			optimizeForRenderToTexture ? 1 : puffpuff.gpu.WgpuContext3D.WgpuTexture.fullChain(width, height));
 		return;
 		#end
 
@@ -250,8 +252,7 @@ import openfl.utils.ByteArray;
 		if (data == null) return;
 
 		#if openfl_wgpu
-		// Mip levels aren't kept.
-		if (miplevel == 0) __wgpuTexture.uploadFromBytes(data.buffer.sub(data.byteOffset, data.byteLength));
+		__wgpuTexture.uploadLevel(miplevel, data.buffer.sub(data.byteOffset, data.byteLength));
 		return;
 		#end
 

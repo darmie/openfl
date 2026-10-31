@@ -59,7 +59,7 @@ class Context3DWgpu
 	public static function drawTriangles(context:Context3D, indexBuffer:IndexBuffer3D, firstIndex:Int, numTriangles:Int):Void
 	{
 		if (context.__cullAll || indexBuffer == null) return;
-		touch(context);
+		if (!touch(context)) clearToStage(context);
 		context.__wgpu.drawProgram(indexBuffer.__wgpuBuffer, firstIndex, numTriangles);
 	}
 
@@ -126,9 +126,15 @@ class Context3DWgpu
 		context.__wgpu.depthEnabled = enableDepthAndStencil;
 	}
 
-	public static function setSamplerStateAt(context:Context3D, sampler:Int, wrap:Context3DWrapMode, filter:Context3DTextureFilter):Void
+	public static function setSamplerStateAt(context:Context3D, sampler:Int, wrap:Context3DWrapMode, filter:Context3DTextureFilter,
+			mipfilter:Context3DMipFilter):Void
 	{
-		context.__wgpu.setSamplerAt(sampler, wrap == REPEAT, filter != NEAREST);
+		context.__wgpu.setSamplerAt(sampler, wrap == REPEAT, filter != NEAREST, switch (mipfilter)
+		{
+			case MIPLINEAR: 2;
+			case MIPNEAREST: 1;
+			default: 0;
+		});
 	}
 
 	public static function setScissorRectangle(context:Context3D, rectangle:Rectangle):Void
@@ -167,10 +173,24 @@ class Context3DWgpu
 		throw new Error(what + " isn't supported with openfl_wgpu. Programs are HXSL: see Program3D.uploadHXSL.");
 	}
 
-	/** A draw or clear into the window tells the stage not to clear it before the display list. **/
-	private static inline function touch(context:Context3D):Void
+	/** A draw or clear into the window tells the stage not to clear it before the display list. False if this was the frame's first. **/
+	private static inline function touch(context:Context3D):Bool
 	{
-		if (context.__renderToTexture == null) context.__stage.__stage3DDrawn = true;
+		if (context.__renderToTexture != null) return true;
+
+		var stage = context.__stage;
+		var first = !stage.__stage3DDrawn;
+		stage.__stage3DDrawn = true;
+		return !first;
+	}
+
+	/** A frame whose first Stage3D call draws shows the stage color behind it, as the stage would clear it. **/
+	private static function clearToStage(context:Context3D):Void
+	{
+		var color = context.__stage.__colorSplit;
+		var wgpu = context.__wgpu;
+		wgpu.endRenderPass();
+		wgpu.beginRenderPass(color[0], color[1], color[2], 1.0, context.__depthEnabled ? 1.0 : null);
 	}
 
 	private static function blendFactor(factor:Context3DBlendFactor):BlendFactor

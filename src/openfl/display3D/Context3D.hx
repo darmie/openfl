@@ -900,10 +900,6 @@ import lime.math.Vector2;
 	**/
 	public function createRectangleTexture(width:Int, height:Int, format:Context3DTextureFormat, optimizeForRenderToTexture:Bool):RectangleTexture
 	{
-		#if openfl_wgpu
-		openfl.display3D._internal.Context3DWgpu.unsupported("Rectangle textures");
-		#end
-
 		return new RectangleTexture(this, width, height, format, optimizeForRenderToTexture);
 	}
 
@@ -1832,7 +1828,7 @@ import lime.math.Vector2;
 	public function setSamplerStateAt(sampler:Int, wrap:Context3DWrapMode, filter:Context3DTextureFilter, mipfilter:Context3DMipFilter):Void
 	{
 		#if openfl_wgpu
-		openfl.display3D._internal.Context3DWgpu.setSamplerStateAt(this, sampler, wrap, filter);
+		openfl.display3D._internal.Context3DWgpu.setSamplerStateAt(this, sampler, wrap, filter, mipfilter);
 		return;
 		#end
 
