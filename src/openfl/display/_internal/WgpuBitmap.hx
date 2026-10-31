@@ -42,6 +42,8 @@ class WgpuBitmap
 		var texture = texture(bitmapData, renderer.__context.wgpu.context3D);
 		if (texture == null) return;
 
+		renderer.__pushMaskObject(bitmap);
+
 		var image = bitmapData.image;
 		var premultiplied = image.premultiplied && image.transparent;
 		renderer.__beginQuads(texture, premultiplied, renderer.__allowSmoothing && bitmap.smoothing);
@@ -68,6 +70,7 @@ class WgpuBitmap
 		var width = bitmapData.width;
 		var height = bitmapData.height;
 		renderer.__quads.addQuad(a * width, b * width, c * height, d * height, tx, ty, 0, 0, 1, 1, alpha);
+		renderer.__popMaskObject(bitmap);
 	}
 
 	/** GPU texture for `bitmapData`. Uploaded when new or changed. **/

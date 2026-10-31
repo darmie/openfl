@@ -7,6 +7,8 @@ import openfl.display._internal.WgpuBitmap;
 import openfl.display._internal.WgpuDisplayObject;
 import openfl.display._internal.WgpuDisplayObjectContainer;
 import openfl.display._internal.WgpuTextField;
+import openfl.geom.Matrix;
+import openfl.geom.Rectangle;
 import puffpuff.canvas.Canvas2D;
 import puffpuff.gpu.QuadBatcher;
 import puffpuff.gpu.WgpuContext3D.WgpuTexture;
@@ -21,6 +23,8 @@ import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 #end
 @:access(openfl.display.DisplayObject)
 @:access(openfl.display.IBitmapDrawable)
+@:access(openfl.geom.Matrix)
+@:access(openfl.geom.Rectangle)
 @:access(openfl.display.Stage)
 @:allow(openfl.display._internal)
 @:allow(openfl.display)
@@ -37,6 +41,8 @@ class WgpuRenderer extends DisplayObjectRenderer
 	@:noCompletion private var __quadsPremultiplied:Bool;
 	@:noCompletion private var __quadsSmooth:Bool;
 	@:noCompletion private var __vectorsOpen:Bool;
+	@:noCompletion private var __clipRects:Array<Rectangle> = [];
+	@:noCompletion private var __numClipRects = 0;
 
 	@:noCompletion private function new(context:RenderContext)
 	{
@@ -70,8 +76,87 @@ class WgpuRenderer extends DisplayObjectRenderer
 	{
 		__vectorsOpen = false;
 		__quadsOpen = false;
+		__numClipRects = 0;
+		__context.wgpu.context3D.disableScissor();
 		__renderDrawable(object);
 		__flush();
+		__context.wgpu.context3D.disableScissor();
+	}
+
+	@:noCompletion private override function __pushMaskObject(object:DisplayObject, handleScrollRect:Bool = true):Void
+	{
+		if (handleScrollRect && object.__scrollRect != null)
+		{
+			__pushMaskRect(object.__scrollRect, object.__renderTransform);
+		}
+	}
+
+	@:noCompletion private override function __popMaskObject(object:DisplayObject, handleScrollRect:Bool = true):Void
+	{
+		if (handleScrollRect && object.__scrollRect != null)
+		{
+			__popMaskRect();
+		}
+	}
+
+	/**
+		Clips later draws to `rect` transformed by `transform` (upright bounding box). Flushes collected draws first,
+		unclipped.
+	**/
+	@:noCompletion private override function __pushMaskRect(rect:Rectangle, transform:Matrix):Void
+	{
+		__flush();
+
+		if (__numClipRects == __clipRects.length)
+		{
+			__clipRects[__numClipRects] = new Rectangle();
+		}
+
+		var matrix = Matrix.__pool.get();
+		matrix.copyFrom(transform);
+		matrix.concat(__worldTransform);
+
+		var clip = __clipRects[__numClipRects];
+		rect.__transform(clip, matrix);
+		Matrix.__pool.release(matrix);
+
+		if (__numClipRects > 0)
+		{
+			var parent = __clipRects[__numClipRects - 1];
+			clip.__contract(parent.x, parent.y, parent.width, parent.height);
+		}
+
+		if (clip.width < 0) clip.width = 0;
+		if (clip.height < 0) clip.height = 0;
+
+		__numClipRects++;
+		__applyClip(clip);
+	}
+
+	/**
+		Ends the clip. Flushes draws made inside it, still clipped.
+	**/
+	@:noCompletion private override function __popMaskRect():Void
+	{
+		__flush();
+
+		if (__numClipRects > 0) __numClipRects--;
+
+		if (__numClipRects > 0)
+		{
+			__applyClip(__clipRects[__numClipRects - 1]);
+		}
+		else
+		{
+			__context.wgpu.context3D.disableScissor();
+		}
+	}
+
+	@:noCompletion private function __applyClip(clip:Rectangle):Void
+	{
+		var left = Math.floor(clip.x);
+		var top = Math.floor(clip.y);
+		__context.wgpu.context3D.setScissorRectangle(left, top, Math.ceil(clip.x + clip.width) - left, Math.ceil(clip.y + clip.height) - top);
 	}
 
 	/**

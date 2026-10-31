@@ -54,6 +54,8 @@ class WgpuTextField
 			ty = nty;
 		}
 
+		renderer.__pushMaskObject(textField);
+
 		var useTextBounds = !(textEngine.background || textEngine.border);
 		var bounds = useTextBounds ? textEngine.textBounds : textEngine.bounds;
 
@@ -74,7 +76,11 @@ class WgpuTextField
 		}
 
 		var text = textEngine.text;
-		if (text == null || text == "") return;
+		if (text == null || text == "")
+		{
+			renderer.__popMaskObject(textField);
+			return;
+		}
 
 		var scale = Math.sqrt(Math.abs(a * d - b * c));
 		var scrollX = -textField.scrollH;
@@ -106,6 +112,8 @@ class WgpuTextField
 					hinted: hinted
 				});
 		}
+
+		renderer.__popMaskObject(textField);
 	}
 }
 #end

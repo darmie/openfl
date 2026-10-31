@@ -16,11 +16,15 @@ class WgpuDisplayObjectContainer
 
 		WgpuDisplayObject.renderDrawable(displayObjectContainer, renderer);
 
+		renderer.__pushMaskObject(displayObjectContainer);
+
 		for (child in displayObjectContainer.__children)
 		{
 			renderer.__renderDrawable(child);
 			child.__renderDirty = false;
 		}
+
+		renderer.__popMaskObject(displayObjectContainer);
 
 		displayObjectContainer.__renderDirty = false;
 	}
