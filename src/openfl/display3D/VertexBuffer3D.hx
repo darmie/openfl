@@ -59,6 +59,9 @@ class VertexBuffer3D
 	@:noCompletion private var __stride:Int;
 	@:noCompletion private var __tempFloat32Array:Float32Array;
 	@:noCompletion private var __usage:Int;
+	#if openfl_wgpu
+	@:noCompletion private var __wgpuBuffer:puffpuff.gpu.WgpuContext3D.WgpuVertexBuffer3D;
+	#end
 	@:noCompletion private var __vertexSize:Int;
 
 	@:noCompletion private function new(context3D:Context3D, numVertices:Int, dataPerVertex:Int, bufferUsage:String)
@@ -66,6 +69,12 @@ class VertexBuffer3D
 		__context = context3D;
 		__numVertices = numVertices;
 		__vertexSize = dataPerVertex;
+
+		#if openfl_wgpu
+		__stride = __vertexSize * 4;
+		__wgpuBuffer = context3D.__wgpu.createVertexBuffer(numVertices, dataPerVertex);
+		return;
+		#end
 
 		var gl = __context.gl;
 
@@ -80,6 +89,11 @@ class VertexBuffer3D
 	**/
 	public function dispose():Void
 	{
+		#if openfl_wgpu
+		__wgpuBuffer.dispose();
+		return;
+		#end
+
 		var gl = __context.gl;
 		gl.deleteBuffer(__id);
 	}
@@ -126,6 +140,12 @@ class VertexBuffer3D
 	public function uploadFromTypedArray(data:ArrayBufferView, byteLength:Int = -1):Void
 	{
 		if (data == null) return;
+
+		#if openfl_wgpu
+		__wgpuBuffer.uploadFromBytes(data.buffer.sub(data.byteOffset, byteLength >= 0 ? byteLength : data.byteLength));
+		return;
+		#end
+
 		var gl = __context.gl;
 
 		__context.__bindGLArrayBuffer(__id);

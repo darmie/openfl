@@ -41,6 +41,11 @@ import openfl.utils.ByteArray;
 		__optimizeForRenderToTexture = optimizeForRenderToTexture;
 		__streamingLevels = streamingLevels;
 
+		#if openfl_wgpu
+		__wgpuTexture = context.__wgpu.createTexture(width, height, gpu.TextureFormat.Bgra8unorm);
+		return;
+		#end
+
 		var gl = __context.gl;
 
 		__textureTarget = gl.TEXTURE_2D;
@@ -244,6 +249,12 @@ import openfl.utils.ByteArray;
 	{
 		if (data == null) return;
 
+		#if openfl_wgpu
+		// Mip levels aren't kept.
+		if (miplevel == 0) __wgpuTexture.uploadFromBytes(data.buffer.sub(data.byteOffset, data.byteLength));
+		return;
+		#end
+
 		var gl = __context.gl;
 
 		var width = __width >> miplevel;
@@ -261,6 +272,10 @@ import openfl.utils.ByteArray;
 
 	@:noCompletion private override function __setSamplerState(state:SamplerState):Bool
 	{
+		#if openfl_wgpu
+		return false;
+		#end
+
 		if (super.__setSamplerState(state))
 		{
 			var gl = __context.gl;

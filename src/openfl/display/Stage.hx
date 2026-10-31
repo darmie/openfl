@@ -349,6 +349,10 @@ class Stage extends DisplayObjectContainer #if lime implements IModule #end
 		This property is supported only when using hardware rendering.
 	**/
 	public var context3D(default, null):Context3D;
+	#if openfl_wgpu
+	/** A Stage3D context drew into the window this frame, so the display list renders over it without clearing. **/
+	@:noCompletion private var __stage3DDrawn:Bool;
+	#end
 
 	/**
 		The physical orientation of the device.
@@ -2355,6 +2359,11 @@ class Stage extends DisplayObjectContainer #if lime implements IModule #end
 				#end
 			}
 
+			#if openfl_wgpu
+			// The 3D picture covers the window, so the display list goes back over it.
+			if (__stage3DDrawn) shouldRender = true;
+			#end
+
 			if (shouldRender)
 			{
 				if (__renderer.__type == CAIRO)
@@ -2364,7 +2373,7 @@ class Stage extends DisplayObjectContainer #if lime implements IModule #end
 					#end
 				}
 
-				if (context3D == null)
+				if (context3D == null #if openfl_wgpu && !__stage3DDrawn #end)
 				{
 					__renderer.__clear();
 				}
@@ -2395,6 +2404,9 @@ class Stage extends DisplayObjectContainer #if lime implements IModule #end
 			}
 
 			__renderer.__cleared = false;
+			#if openfl_wgpu
+			__stage3DDrawn = false;
+			#end
 		}
 		#end
 

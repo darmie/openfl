@@ -286,10 +286,21 @@ import lime.math.Vector2;
 	@:noCompletion private var __stage3D:Stage3D;
 	@:noCompletion private var __state:Context3DState;
 	@:noCompletion private var __vertexConstants:Float32Array;
+	#if openfl_wgpu
+	@:noCompletion private var __cullAll:Bool;
+	@:noCompletion private var __depthEnabled:Bool;
+	@:noCompletion private var __renderToTexture:TextureBase;
+	@:noCompletion private var __wgpu:puffpuff.gpu.WgpuContext3D;
+	#end
 
 	@:noCompletion private function new(stage:Stage, contextState:Context3DState = null, stage3D:Stage3D = null)
 	{
 		super();
+
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.init(this, stage, stage3D);
+		return;
+		#end
 
 		__stage = stage;
 		__contextState = contextState;
@@ -466,6 +477,11 @@ import lime.math.Vector2;
 	public function clear(red:Float = 0, green:Float = 0, blue:Float = 0, alpha:Float = 1, depth:Float = 1, stencil:UInt = 0,
 			mask:UInt = Context3DClearMask.ALL):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.clear(this, red, green, blue, alpha, depth, mask);
+		return;
+		#end
+
 		__clear(false, red, green, blue, alpha, depth, stencil, mask);
 	}
 
@@ -599,6 +615,11 @@ import lime.math.Vector2;
 	public function configureBackBuffer(width:Int, height:Int, antiAlias:Int, enableDepthAndStencil:Bool = true, wantsBestResolution:Bool = false,
 			wantsBestResolutionOnBrowserZoom:Bool = false):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.configureBackBuffer(this, width, height, enableDepthAndStencil);
+		return;
+		#end
+
 		var pixelRatio = __stage.window.scale;
 		#if !openfl_dpi_aware
 		if (wantsBestResolution)
@@ -768,6 +789,10 @@ import lime.math.Vector2;
 	**/
 	public function createCubeTexture(size:Int, format:Context3DTextureFormat, optimizeForRenderToTexture:Bool, streamingLevels:Int = 0):CubeTexture
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("Cube textures");
+		#end
+
 		return new CubeTexture(this, size, format, optimizeForRenderToTexture, streamingLevels);
 	}
 
@@ -875,6 +900,10 @@ import lime.math.Vector2;
 	**/
 	public function createRectangleTexture(width:Int, height:Int, format:Context3DTextureFormat, optimizeForRenderToTexture:Bool):RectangleTexture
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("Rectangle textures");
+		#end
+
 		return new RectangleTexture(this, width, height, format, optimizeForRenderToTexture);
 	}
 
@@ -1033,6 +1062,10 @@ import lime.math.Vector2;
 	**/
 	public function createVideoTexture():VideoTexture
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("Video textures");
+		#end
+
 		#if (js && html5)
 		return new VideoTexture(this);
 		#else
@@ -1110,6 +1143,10 @@ import lime.math.Vector2;
 	**/
 	public function drawToBitmapData(destination:BitmapData, srcRect:Rectangle = null, destPoint:Point = null):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("drawToBitmapData");
+		#end
+
 		#if lime
 		if (destination == null) return;
 
@@ -1233,6 +1270,11 @@ import lime.math.Vector2;
 	**/
 	public function drawTriangles(indexBuffer:IndexBuffer3D, firstIndex:Int = 0, numTriangles:Int = -1):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.drawTriangles(this, indexBuffer, firstIndex, numTriangles);
+		return;
+		#end
+
 		#if !openfl_disable_display_render
 		if (__state.renderToTexture == null)
 		{
@@ -1282,6 +1324,11 @@ import lime.math.Vector2;
 	**/
 	public function present():Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.present(this);
+		return;
+		#end
+
 		setRenderToBackBuffer();
 
 		if (__stage3D != null && __backBufferTexture != null)
@@ -1339,6 +1386,11 @@ import lime.math.Vector2;
 	**/
 	public function setBlendFactors(sourceFactor:Context3DBlendFactor, destinationFactor:Context3DBlendFactor):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setBlendFactors(this, sourceFactor, destinationFactor);
+		return;
+		#end
+
 		setBlendFactorsSeparate(sourceFactor, destinationFactor, sourceFactor, destinationFactor);
 	}
 
@@ -1370,6 +1422,11 @@ import lime.math.Vector2;
 	**/
 	public function setColorMask(red:Bool, green:Bool, blue:Bool, alpha:Bool):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setColorMask(this, red, green, blue, alpha);
+		return;
+		#end
+
 		__state.colorMaskRed = red;
 		__state.colorMaskGreen = green;
 		__state.colorMaskBlue = blue;
@@ -1391,6 +1448,11 @@ import lime.math.Vector2;
 	**/
 	public function setCulling(triangleFaceToCull:Context3DTriangleFace):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setCulling(this, triangleFaceToCull);
+		return;
+		#end
+
 		__state.culling = triangleFaceToCull;
 	}
 
@@ -1416,6 +1478,11 @@ import lime.math.Vector2;
 	**/
 	public function setDepthTest(depthMask:Bool, passCompareMode:Context3DCompareMode):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setDepthTest(this, depthMask, passCompareMode);
+		return;
+		#end
+
 		__state.depthMask = depthMask;
 		__state.depthCompareMode = passCompareMode;
 	}
@@ -1428,6 +1495,11 @@ import lime.math.Vector2;
 	**/
 	public function setProgram(program:Program3D):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setProgram(this, program);
+		return;
+		#end
+
 		__state.program = program;
 		__state.shader = null; // TODO: Merge this logic
 
@@ -1468,6 +1540,11 @@ import lime.math.Vector2;
 	public function setProgramConstantsFromByteArray(programType:Context3DProgramType, firstRegister:Int, numRegisters:Int, data:ByteArray,
 			byteArrayOffset:UInt):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("Program constants by register");
+		return;
+		#end
+
 		#if lime
 		if (numRegisters == 0 || __state.program == null) return;
 
@@ -1526,6 +1603,11 @@ import lime.math.Vector2;
 	**/
 	public function setProgramConstantsFromMatrix(programType:Context3DProgramType, firstRegister:Int, matrix:Matrix3D, transposedMatrix:Bool = false):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("Program constants by register");
+		return;
+		#end
+
 		#if lime
 		if (__state.program != null && __state.program.__format == GLSL)
 		{
@@ -1625,6 +1707,11 @@ import lime.math.Vector2;
 	**/
 	public function setProgramConstantsFromVector(programType:Context3DProgramType, firstRegister:Int, data:Vector<Float>, numRegisters:Int = -1):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("Program constants by register");
+		return;
+		#end
+
 		if (numRegisters == 0) return;
 
 		if (__state.program != null && __state.program.__format == GLSL) {}
@@ -1665,6 +1752,11 @@ import lime.math.Vector2;
 	**/
 	public function setRenderToBackBuffer():Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setRenderToBackBuffer(this);
+		return;
+		#end
+
 		__state.renderToTexture = null;
 	}
 
@@ -1706,6 +1798,11 @@ import lime.math.Vector2;
 	**/
 	public function setRenderToTexture(texture:TextureBase, enableDepthAndStencil:Bool = false, antiAlias:Int = 0, surfaceSelector:Int = 0):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setRenderToTexture(this, texture, enableDepthAndStencil);
+		return;
+		#end
+
 		__state.renderToTexture = texture;
 		__state.renderToTextureDepthStencil = enableDepthAndStencil;
 		__state.renderToTextureAntiAlias = antiAlias;
@@ -1734,6 +1831,11 @@ import lime.math.Vector2;
 	**/
 	public function setSamplerStateAt(sampler:Int, wrap:Context3DWrapMode, filter:Context3DTextureFilter, mipfilter:Context3DMipFilter):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setSamplerStateAt(this, sampler, wrap, filter);
+		return;
+		#end
+
 		// if (sampler < 0 || sampler > Context3D.MAX_SAMPLERS) {
 
 		// 	throw new Error ("sampler out of range");
@@ -1765,6 +1867,11 @@ import lime.math.Vector2;
 	**/
 	public function setScissorRectangle(rectangle:Rectangle):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setScissorRectangle(this, rectangle);
+		return;
+		#end
+
 		if (rectangle != null)
 		{
 			__state.scissorEnabled = true;
@@ -1824,6 +1931,11 @@ import lime.math.Vector2;
 			actionOnBothPass:Context3DStencilAction = KEEP, actionOnDepthFail:Context3DStencilAction = KEEP,
 			actionOnDepthPassStencilFail:Context3DStencilAction = KEEP):Void
 	{
+		#if openfl_wgpu
+		// Stencil isn't implemented yet.
+		return;
+		#end
+
 		__state.stencilTriangleFace = triangleFace;
 		__state.stencilCompareMode = compareMode;
 		__state.stencilPass = actionOnBothPass;
@@ -1847,6 +1959,10 @@ import lime.math.Vector2;
 	**/
 	public function setStencilReferenceValue(referenceValue:UInt, readMask:UInt = 0xFF, writeMask:UInt = 0xFF):Void
 	{
+		#if openfl_wgpu
+		return;
+		#end
+
 		__state.stencilReferenceValue = referenceValue;
 		__state.stencilReadMask = readMask;
 		__state.stencilWriteMask = writeMask;
@@ -1872,6 +1988,11 @@ import lime.math.Vector2;
 	**/
 	public function setTextureAt(sampler:Int, texture:TextureBase):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setTextureAt(this, sampler, texture);
+		return;
+		#end
+
 		// if (sampler < 0 || sampler > Context3D.MAX_SAMPLERS) {
 
 		// 	throw new Error ("sampler out of range");
@@ -1933,6 +2054,11 @@ import lime.math.Vector2;
 	**/
 	public function setVertexBufferAt(index:Int, buffer:VertexBuffer3D, bufferOffset:Int = 0, format:Context3DVertexBufferFormat = FLOAT_4):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setVertexBufferAt(this, index, buffer, bufferOffset, format);
+		return;
+		#end
+
 		if (index < 0) return;
 
 		if (buffer == null)

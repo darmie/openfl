@@ -81,6 +81,9 @@ import lime.utils.BytePointer;
 	@:noCompletion private var __glVertexSource:String;
 	// @:noCompletion private var __memUsage:Int;
 	@:noCompletion private var __samplerStates:Array<SamplerState>;
+	#if openfl_wgpu
+	@:noCompletion private var __hxsl:puffpuff.gpu.HxslProgram;
+	#end
 
 	@:noCompletion private function new(context3D:Context3D, format:Context3DProgramFormat)
 	{
@@ -116,6 +119,11 @@ import lime.utils.BytePointer;
 	**/
 	public function dispose():Void
 	{
+		#if openfl_wgpu
+		__hxsl = null;
+		return;
+		#end
+
 		__deleteShaders();
 	}
 
@@ -392,6 +400,10 @@ import lime.utils.BytePointer;
 	**/
 	public function upload(vertexProgram:ByteArray, fragmentProgram:ByteArray):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("AGAL programs");
+		#end
+
 		if (__format != AGAL) return;
 
 		// var samplerStates = new Vector<SamplerState> (Context3D.MAX_SAMPLERS);
@@ -423,6 +435,10 @@ import lime.utils.BytePointer;
 	**/
 	public function uploadSources(vertexSource:String, fragmentSource:String):Void
 	{
+		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.unsupported("GLSL programs");
+		#end
+
 		if (__format != GLSL) return;
 
 		// TODO: Precision hint?
@@ -718,6 +734,51 @@ import lime.utils.BytePointer;
 			// }
 		}
 	}
+
+	#if openfl_wgpu
+	/**
+		Makes this program from an HXSL shader class (one that implements `hlwgpu.hxsl.Shader`). Its vertex stage reads the
+		`@input` fields by location, see `inputLocation`, and its `@param` fields are set by name with `setParameter`.
+	**/
+	public function uploadHXSL(shader:Class<Dynamic>):Void
+	{
+		__hxsl = puffpuff.gpu.HxslProgram.of(shader);
+	}
+
+	/**
+		Sets the `@param` named `name` to `values`, as many floats as the parameter holds. False if the shader never reads it.
+	**/
+	public function setParameter(name:String, values:Array<Float>):Bool
+	{
+		return __hxsl != null && __hxsl.setFloats(name, values);
+	}
+
+	/**
+		Sets the `@param` named `name`, a `Mat4`, to `matrix`. A `Matrix3D` keeps its translation in the last row and the shader
+		multiplies a `Vec4` by the matrix, so the matrix is flipped on the way in unless `transposed` is set.
+	**/
+	public function setMatrixParameter(name:String, matrix:openfl.geom.Matrix3D, transposed:Bool = false):Bool
+	{
+		if (__hxsl == null) return false;
+
+		var raw = matrix.rawData;
+		var values = [];
+		for (i in 0...16) values.push(transposed ? raw[i] : raw[(i % 4) * 4 + Std.int(i / 4)]);
+		return __hxsl.setFloats(name, values);
+	}
+
+	/** Vertex attribute index of the `@input` field `name`, for `Context3D.setVertexBufferAt`. -1 if there is none. **/
+	public function inputLocation(name:String):Int
+	{
+		return __hxsl != null ? __hxsl.inputLocation(name) : -1;
+	}
+
+	/** Sampler index of the `Sampler2D` named `name`, for `Context3D.setTextureAt`. -1 if there is none. **/
+	public function textureSlot(name:String):Int
+	{
+		return __hxsl != null ? __hxsl.textureSlot(name) : -1;
+	}
+	#end
 
 	@:noCompletion private function __flush():Void
 	{

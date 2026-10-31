@@ -34,11 +34,19 @@ import openfl.Vector;
 	@:noCompletion private var __numIndices:Int;
 	@:noCompletion private var __tempUInt16Array:UInt16Array;
 	@:noCompletion private var __usage:Int;
+	#if openfl_wgpu
+	@:noCompletion private var __wgpuBuffer:puffpuff.gpu.WgpuContext3D.WgpuIndexBuffer3D;
+	#end
 
 	@:noCompletion private function new(context3D:Context3D, numIndices:Int, bufferUsage:Context3DBufferUsage)
 	{
 		__context = context3D;
 		__numIndices = numIndices;
+
+		#if openfl_wgpu
+		__wgpuBuffer = context3D.__wgpu.createIndexBuffer(numIndices);
+		return;
+		#end
 
 		var gl = __context.gl;
 		__id = gl.createBuffer();
@@ -52,6 +60,11 @@ import openfl.Vector;
 	**/
 	public function dispose():Void
 	{
+		#if openfl_wgpu
+		__wgpuBuffer.dispose();
+		return;
+		#end
+
 		var gl = __context.gl;
 		gl.deleteBuffer(__id);
 	}
@@ -94,6 +107,12 @@ import openfl.Vector;
 	public function uploadFromTypedArray(data:ArrayBufferView, byteLength:Int = -1):Void
 	{
 		if (data == null) return;
+
+		#if openfl_wgpu
+		__wgpuBuffer.uploadFromBytes(data.buffer.sub(data.byteOffset, byteLength >= 0 ? byteLength : data.byteLength));
+		return;
+		#end
+
 		var gl = __context.gl;
 		__context.__bindGLElementArrayBuffer(__id);
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, __usage);

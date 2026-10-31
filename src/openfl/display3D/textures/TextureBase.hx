@@ -58,12 +58,20 @@ class TextureBase extends EventDispatcher
 	@:noCompletion private var __textureID:GLTexture;
 	@:noCompletion private var __textureTarget:Int;
 	@:noCompletion private var __width:Int;
+	#if openfl_wgpu
+	@:noCompletion private var __wgpuTexture:puffpuff.gpu.WgpuContext3D.WgpuTexture;
+	#end
 
 	@:noCompletion private function new(context:Context3D)
 	{
 		super();
 
 		__context = context;
+
+		#if openfl_wgpu
+		return;
+		#end
+
 		var gl = __context.gl;
 		// __textureTarget = target;
 
@@ -85,6 +93,15 @@ class TextureBase extends EventDispatcher
 	**/
 	public function dispose():Void
 	{
+		#if openfl_wgpu
+		if (__wgpuTexture != null)
+		{
+			__wgpuTexture.dispose();
+			__wgpuTexture = null;
+		}
+		return;
+		#end
+
 		var gl = __context.gl;
 
 		if (__alphaTexture != null)
@@ -231,6 +248,15 @@ class TextureBase extends EventDispatcher
 			image.powerOfTwo = true;
 			#end
 		}
+
+		#if openfl_wgpu
+		// The texture is BGRA.
+		if (image.format != BGRA32)
+		{
+			image = image.clone();
+			image.format = BGRA32;
+		}
+		#end
 		#end
 
 		return image;

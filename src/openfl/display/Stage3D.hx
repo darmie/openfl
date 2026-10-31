@@ -316,6 +316,14 @@ class Stage3D extends EventDispatcher
 			return;
 		}
 
+		#if openfl_wgpu
+		if (renderer.__type == WGPU)
+		{
+			context3D = new Context3D(stage, null, this);
+			__dispatchCreate();
+		}
+		else
+		#end
 		if (renderer.__type == OPENGL)
 		{
 			#if openfl_share_context
