@@ -2,6 +2,7 @@ package openfl.display._internal;
 
 #if (!flash && openfl_wgpu)
 import openfl.display.WgpuRenderer;
+import openfl.text.AntiAliasType;
 import openfl.text.TextField;
 import openfl.text._internal.TextEngine;
 import puffpuff.canvas.Affine;
@@ -83,6 +84,8 @@ class WgpuTextField
 			scrollY -= textEngine.lineHeights[i];
 		}
 
+		// Layout uses hinted advances if TextEngine asked for them, so glyphs are placed the same way.
+		var hinted = puffpuff.text.FontAtlas.hintedAdvances && (textEngine.antiAliasType != AntiAliasType.ADVANCED || textEngine.sharpness < 400);
 		var atlas = puffpuff.text.FontAtlas.getDefault(renderer.__context.wgpu.context3D);
 		renderer.__beginQuads(atlas.upload(renderer.__context.wgpu.context3D), false, true);
 
@@ -98,7 +101,10 @@ class WgpuTextField
 			var localX = group.offsetX + scrollX;
 			var localY = group.offsetY + scrollY;
 			font.drawText(renderer.__quads, text.substring(group.startIndex, group.endIndex), a * localX + c * localY + tx, b * localX + d * localY + ty,
-				group.format.size * scale, group.format.color & 0xFFFFFF, alpha);
+				group.format.size * scale, group.format.color & 0xFFFFFF, alpha, {
+					letterSpacing: group.format.letterSpacing != null ? group.format.letterSpacing * scale : null,
+					hinted: hinted
+				});
 		}
 	}
 }

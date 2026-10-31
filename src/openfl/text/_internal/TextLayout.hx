@@ -244,6 +244,7 @@ class TextLayout
 		if (text != null && text != "" && font != null)
 		{
 			var shaped = new lime.text.TextLayout(text, font, size, direction, script, language);
+			shaped.autoHint = autoHint;
 			for (p in shaped.positions)
 			{
 				positions.push(new GlyphPosition(p.glyph, new Vector2(p.advance.x + letterSpacing, p.advance.y), p.offset));
