@@ -1,6 +1,7 @@
 package openfl.display._internal;
 
 #if (!flash && openfl_wgpu)
+import openfl.display.BitmapData;
 import openfl.display.CapsStyle;
 import openfl.display.GradientType;
 import openfl.display.Graphics;
@@ -8,6 +9,7 @@ import openfl.display.JointStyle;
 import openfl.display.SpreadMethod;
 import openfl.display.WgpuRenderer;
 import openfl.geom.Matrix;
+import openfl.Vector;
 import puffpuff.canvas.Affine;
 import puffpuff.canvas.Canvas2D;
 import puffpuff.canvas.Paint;
@@ -16,12 +18,13 @@ import puffpuff.canvas.Path;
 import puffpuff.canvas.Stroke;
 
 /**
-	Draws the commands of a `Graphics` with `Canvas2D`: solid and gradient fills and line styles, with the
+	Draws the commands of a `Graphics` with `Canvas2D`, and its `drawQuads` with textured quads: solid and gradient fills and line styles, with the
 	nonzero and even-odd rules. Gradients take up to four stops, pad, reflect and repeat spreads and any
 	gradient matrix; the focal point and linearRGB interpolation are not applied. The fill and the stroke accumulate separate paths, because a line
 	style change ends the stroke segment but not the fill.
 **/
 @:access(openfl.display.Graphics)
+@:access(openfl.display.WgpuRenderer)
 class WgpuGraphics
 {
 	public static function render(graphics:Graphics, renderer:WgpuRenderer, local:Affine, alpha:Float):Void
@@ -29,7 +32,7 @@ class WgpuGraphics
 		var commands = graphics.__commands;
 		if (commands == null || commands.length == 0) return;
 
-		var state = new WgpuGraphicsState(renderer.canvas, local, alpha);
+		var state = new WgpuGraphicsState(renderer, local, alpha);
 		var data = new DrawCommandReader(commands);
 
 		for (type in commands.types)
@@ -43,6 +46,14 @@ class WgpuGraphics
 				case BEGIN_GRADIENT_FILL:
 					var c = data.readBeginGradientFill();
 					state.beginPaint(WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod));
+
+				case BEGIN_BITMAP_FILL:
+					var c = data.readBeginBitmapFill();
+					state.beginBitmapFill(c.bitmap, c.smooth);
+
+				case DRAW_QUADS:
+					var c = data.readDrawQuads();
+					state.drawQuads(c.rects, c.indices, c.transforms);
 
 				case END_FILL:
 					data.readEndFill();
@@ -106,14 +117,18 @@ class WgpuGraphics
 	}
 }
 
+@:access(openfl.display.WgpuRenderer)
 @:allow(openfl.display._internal.WgpuGraphics)
 private class WgpuGraphicsState
 {
 	public var evenOdd:Bool = false;
 	public var strokePaint:Paint;
 
+	private var renderer:WgpuRenderer;
 	private var canvas:Canvas2D;
 	private var local:Affine;
+	private var bitmap:BitmapData;
+	private var bitmapSmooth:Bool;
 	private var alpha:Float;
 	private var fillPaint:Paint;
 	private var fillPath:Path;
@@ -122,9 +137,10 @@ private class WgpuGraphicsState
 	private var x:Float = 0;
 	private var y:Float = 0;
 
-	public function new(canvas:Canvas2D, local:Affine, alpha:Float)
+	public function new(renderer:WgpuRenderer, local:Affine, alpha:Float)
 	{
-		this.canvas = canvas;
+		this.renderer = renderer;
+		this.canvas = renderer.canvas;
 		this.local = local;
 		this.alpha = alpha;
 	}
@@ -181,6 +197,96 @@ private class WgpuGraphicsState
 		flushFill();
 		fillPaint = null;
 		fillPath = null;
+		bitmap = null;
+	}
+
+	/**
+		The bitmap `drawQuads` samples. Paths filled with a bitmap are not drawn yet, so a bitmap fill ends any
+		other fill.
+	**/
+	public function beginBitmapFill(bitmapData:BitmapData, smooth:Bool):Void
+	{
+		beginPaint(null);
+		bitmap = bitmapData;
+		bitmapSmooth = smooth;
+	}
+
+	/**
+		Draws quads of the bitmap fill. `rects` are bitmap rectangles, `indices` pick one per quad, and `transforms`
+		place each quad: six-value matrix, four values (position is origin), two values (a position), or nothing
+		(rectangle's own position). Shape's transform applies on top.
+	**/
+	public function drawQuads(rects:Vector<Float>, indices:Vector<Int>, transforms:Vector<Float>):Void
+	{
+		flushFill();
+		flushStroke();
+
+		if (bitmap == null || rects == null) return;
+
+		var texture = WgpuBitmap.texture(bitmap, renderer.__context.wgpu.context3D);
+		if (texture == null) return;
+
+		var hasIndices = indices != null;
+		var length = hasIndices ? indices.length : Math.floor(rects.length / 4);
+		var matrixAndPosition = false, matrix = false, position = false;
+		if (transforms != null)
+		{
+			if (transforms.length >= length * 6) matrixAndPosition = true;
+			else if (transforms.length >= length * 4) matrix = true;
+			else if (transforms.length >= length * 2) position = true;
+		}
+
+		renderer.__beginQuads(texture, WgpuBitmap.isPremultiplied(bitmap), renderer.__allowSmoothing && bitmapSmooth);
+
+		var invW = 1 / texture.width;
+		var invH = 1 / texture.height;
+		for (i in 0...length)
+		{
+			var ri = hasIndices ? indices[i] * 4 : i * 4;
+			if (ri < 0) continue;
+
+			var w = rects[ri + 2];
+			var h = rects[ri + 3];
+			if (w <= 0 || h <= 0) continue;
+
+			var ta = 1.0, tb = 0.0, tc = 0.0, td = 1.0, tx = 0.0, ty = 0.0;
+			if (matrixAndPosition)
+			{
+				var ti = i * 6;
+				ta = transforms[ti];
+				tb = transforms[ti + 1];
+				tc = transforms[ti + 2];
+				td = transforms[ti + 3];
+				tx = transforms[ti + 4];
+				ty = transforms[ti + 5];
+			}
+			else if (matrix)
+			{
+				var ti = i * 4;
+				ta = transforms[ti];
+				tb = transforms[ti + 1];
+				tc = transforms[ti + 2];
+				td = transforms[ti + 3];
+			}
+			else if (position)
+			{
+				tx = transforms[i * 2];
+				ty = transforms[i * 2 + 1];
+			}
+			else
+			{
+				tx = rects[ri];
+				ty = rects[ri + 1];
+			}
+
+			// Quad's matrix, then the shape's.
+			var a = local.a * ta + local.c * tb;
+			var b = local.b * ta + local.d * tb;
+			var c = local.a * tc + local.c * td;
+			var d = local.b * tc + local.d * td;
+			renderer.__quads.addQuad(a * w, b * w, c * h, d * h, local.a * tx + local.c * ty + local.e, local.b * tx + local.d * ty + local.f, rects[ri] * invW,
+				rects[ri + 1] * invH, w * invW, h * invH, alpha);
+		}
 	}
 
 	public function lineStyle(thickness:Null<Float>, color:Int, lineAlpha:Float, caps:CapsStyle, joints:JointStyle, miterLimit:Float):Void
@@ -291,6 +397,7 @@ private class WgpuGraphicsState
 	{
 		if (fillPaint == null || fillPath == null) return;
 
+		renderer.__beginVectors();
 		canvas.fill(fillPath, fillPaint, evenOdd ? EvenOdd : NonZero, local, alpha);
 		fillPath = new Path().moveTo(x, y);
 	}
@@ -299,6 +406,7 @@ private class WgpuGraphicsState
 	{
 		if (stroke == null || strokePath == null) return;
 
+		renderer.__beginVectors();
 		canvas.stroke(strokePath, stroke, strokePaint, local, alpha);
 		strokePath = new Path().moveTo(x, y);
 	}

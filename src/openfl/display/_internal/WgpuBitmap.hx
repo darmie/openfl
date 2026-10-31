@@ -39,14 +39,12 @@ class WgpuBitmap
 		var alpha = renderer.__getAlpha(bitmap.__worldAlpha);
 		if (alpha <= 0) return;
 
-		var texture = texture(bitmapData, renderer.__context.wgpu.context3D);
+		var texture = WgpuBitmap.texture(bitmapData, renderer.__context.wgpu.context3D);
 		if (texture == null) return;
 
 		renderer.__pushMaskObject(bitmap);
 
-		var image = bitmapData.image;
-		var premultiplied = image.premultiplied && image.transparent;
-		renderer.__beginQuads(texture, premultiplied, renderer.__allowSmoothing && bitmap.smoothing);
+		renderer.__beginQuads(texture, isPremultiplied(bitmapData), renderer.__allowSmoothing && bitmap.smoothing);
 
 		var transform = bitmap.__renderTransform;
 		var world = renderer.__worldTransform;
@@ -73,8 +71,15 @@ class WgpuBitmap
 		renderer.__popMaskObject(bitmap);
 	}
 
+	/** Whether `bitmapData` is premultiplied. Blending needs it. **/
+	public static function isPremultiplied(bitmapData:BitmapData):Bool
+	{
+		var image = bitmapData.image;
+		return image != null && image.premultiplied && image.transparent;
+	}
+
 	/** GPU texture for `bitmapData`. Uploaded when new or changed. **/
-	private static function texture(bitmapData:BitmapData, context3D:WgpuContext3D):WgpuTexture
+	public static function texture(bitmapData:BitmapData, context3D:WgpuContext3D):WgpuTexture
 	{
 		var image = bitmapData.image;
 		if (image == null || image.buffer == null || image.buffer.data == null) return null;
