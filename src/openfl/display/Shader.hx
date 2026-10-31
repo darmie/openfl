@@ -122,7 +122,7 @@ import openfl.utils.ByteArray;
 #if !macro
 @:autoBuild(openfl.utils._internal.ShaderMacro.build())
 #end
-class Shader
+class Shader #if openfl_wgpu implements hlwgpu.hxsl.Shader #end
 {
 	/**
 		The raw shader bytecode for this Shader instance.

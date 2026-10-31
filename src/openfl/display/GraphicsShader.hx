@@ -8,6 +8,19 @@ import openfl.utils.ByteArray;
 #end
 class GraphicsShader extends Shader
 {
+	#if openfl_wgpu
+	/**
+		Base for HXSL quad shaders. Put `@:extends openfl.display.GraphicsShader;` in `SRC`, override `fragment()`, call
+		`flixelTexture2D(uv)` for the texel with the quad's alpha and color transform applied.
+	**/
+	static var SRC = {
+		@:extends puffpuff.gpu.shaders.OffsetQuadShader;
+	};
+
+	/** Draws with the stock quad shader, which this source mirrors. **/
+	public static final HXSL_STOCK = true;
+	#end
+
 	@:glVertexHeader("attribute float openfl_Alpha;
 		attribute vec4 openfl_ColorMultiplier;
 		attribute vec4 openfl_ColorOffset;
