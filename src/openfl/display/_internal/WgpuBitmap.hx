@@ -31,7 +31,7 @@ class WgpuBitmap
 
 	public static function render(bitmap:Bitmap, renderer:WgpuRenderer):Void
 	{
-		if (!bitmap.__renderable) return;
+		if (!renderer.__canRender(bitmap)) return;
 
 		var bitmapData = bitmap.__bitmapData;
 		if (bitmapData == null || !bitmapData.__isValid || !bitmapData.readable) return;

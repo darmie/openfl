@@ -12,7 +12,7 @@ class WgpuDisplayObjectContainer
 	{
 		displayObjectContainer.__cleanupRemovedChildren();
 
-		if (!displayObjectContainer.__renderable || displayObjectContainer.__worldAlpha <= 0) return;
+		if (!renderer.__canRender(displayObjectContainer) || displayObjectContainer.__worldAlpha <= 0) return;
 
 		WgpuDisplayObject.renderDrawable(displayObjectContainer, renderer);
 

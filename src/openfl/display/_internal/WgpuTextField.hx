@@ -29,7 +29,7 @@ class WgpuTextField
 			textField.__dirty = false;
 		}
 
-		if (!textField.__renderable) return;
+		if (!renderer.__canRender(textField)) return;
 
 		var alpha = renderer.__getAlpha(textField.__worldAlpha);
 		if (alpha <= 0) return;

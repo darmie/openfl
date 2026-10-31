@@ -41,9 +41,17 @@ class WgpuRenderer extends DisplayObjectRenderer
 	@:noCompletion private var __quadsOpen:Bool;
 	@:noCompletion private var __quadsPremultiplied:Bool;
 	@:noCompletion private var __quadsSmooth:Bool;
+	@:noCompletion private var __quadsMultiply:Bool;
 	@:noCompletion private var __vectorsOpen:Bool;
 	@:noCompletion private var __clipRects:Array<Rectangle> = [];
 	@:noCompletion private var __numClipRects = 0;
+	@:noCompletion private var __deviceWidth = 0;
+	@:noCompletion private var __deviceHeight = 0;
+	@:noCompletion private var __maskTextures:Array<WgpuTexture> = [];
+	@:noCompletion private var __maskObjects:Array<DisplayObject> = [];
+	@:noCompletion private var __maskTargets:Array<WgpuTexture> = [];
+	@:noCompletion private var __target:WgpuTexture;
+	@:noCompletion private var __renderingMask = 0;
 
 	@:noCompletion private function new(context:RenderContext)
 	{
@@ -78,6 +86,9 @@ class WgpuRenderer extends DisplayObjectRenderer
 		__vectorsOpen = false;
 		__quadsOpen = false;
 		__numClipRects = 0;
+		__maskObjects = [];
+		__maskTargets = [];
+		__target = null;
 		__context.wgpu.context3D.disableScissor();
 		__renderDrawable(object);
 		__flush();
@@ -90,14 +101,95 @@ class WgpuRenderer extends DisplayObjectRenderer
 		{
 			__pushMaskRect(object.__scrollRect, object.__renderTransform);
 		}
+
+		if (object.__mask != null)
+		{
+			__pushMask(object.__mask);
+		}
 	}
 
 	@:noCompletion private override function __popMaskObject(object:DisplayObject, handleScrollRect:Bool = true):Void
 	{
+		if (!object.__isCacheBitmapRender && object.__mask != null)
+		{
+			__popMask();
+		}
+
 		if (handleScrollRect && object.__scrollRect != null)
 		{
 			__popMaskRect();
 		}
+	}
+
+	/**
+		Starts a mask. Draws go to their own transparent texture until `__popMask`.
+	**/
+	@:noCompletion private override function __pushMask(mask:DisplayObject):Void
+	{
+		__flush();
+
+		__maskObjects.push(mask);
+		__maskTargets.push(__target);
+		__setTarget(__maskTexture((__maskObjects.length - 1) * 2), true);
+	}
+
+	/**
+		Ends a mask. Scales the content by the mask's coverage texture and draws the result onto the previous target.
+	**/
+	@:noCompletion private override function __popMask():Void
+	{
+		__flush();
+
+		var mask = __maskObjects.pop();
+		var parent = __maskTargets.pop();
+		var content = __target;
+		var coverage = __maskTexture(__maskObjects.length * 2 + 1);
+
+		__setTarget(coverage, true);
+		__renderingMask++;
+		__renderDrawable(mask);
+		__flush();
+		__renderingMask--;
+
+		__setTarget(content, false);
+		__drawTexture(coverage, false, true);
+
+		__setTarget(parent, false);
+		__drawTexture(content, true, false);
+	}
+
+	/** Draws `texture`, the size of the target, over the whole target. **/
+	/** Whether to draw `object`. Skips hidden objects and masks, unless the mask itself is drawn as coverage. **/
+	@:noCompletion private inline function __canRender(object:DisplayObject):Bool
+	{
+		return __renderingMask > 0 ? (object.__visible && object.__scaleX != 0 && object.__scaleY != 0) : object.__renderable;
+	}
+
+	@:noCompletion private function __drawTexture(texture:WgpuTexture, premultiplied:Bool, multiply:Bool):Void
+	{
+		__beginQuads(texture, premultiplied, false, multiply);
+		__quads.addQuad(__deviceWidth, 0, 0, __deviceHeight, 0, 0, 0, 0, 1, 1, 1.0);
+		__flush();
+	}
+
+	/** Sets the texture to draw into (null for the window), cleared to transparent if `clear` is set. **/
+	@:noCompletion private function __setTarget(target:WgpuTexture, clear:Bool):Void
+	{
+		var context3D = __context.wgpu.context3D;
+		if (target == null) context3D.setRenderToBackBuffer() else context3D.setRenderToTexture(target);
+		__target = target;
+
+		if (clear) context3D.beginRenderPass(0, 0, 0, 0) else context3D.beginRenderPass();
+	}
+
+	@:noCompletion private function __maskTexture(index:Int):WgpuTexture
+	{
+		while (__maskTextures.length <= index)
+		{
+			__maskTextures.push(__context.wgpu.context3D.createTexture(__deviceWidth, __deviceHeight));
+		}
+
+		return __maskTextures[index];
 	}
 
 	/**
@@ -176,7 +268,20 @@ class WgpuRenderer extends DisplayObjectRenderer
 		{
 			var context3D = __context.wgpu.context3D;
 			var srcRgb = context3D.srcRgb;
+			var dstRgb = context3D.dstRgb;
+			var srcAlpha = context3D.srcAlpha;
+			var dstAlpha = context3D.dstAlpha;
 			var smoothing = context3D.smoothing;
+
+			// Multiplying: the destination is scaled by the source's alpha and the source adds nothing, which is how a
+			// mask's coverage takes away what it does not cover.
+			if (__quadsMultiply)
+			{
+				context3D.srcRgb = gpu.BlendFactor.Zero;
+				context3D.dstRgb = gpu.BlendFactor.SrcAlpha;
+				context3D.srcAlpha = gpu.BlendFactor.Zero;
+				context3D.dstAlpha = gpu.BlendFactor.SrcAlpha;
+			}
 
 			// Premultiplied colour is added as it is; straight colour is scaled by its alpha.
 			if (__quadsPremultiplied)
@@ -190,6 +295,9 @@ class WgpuRenderer extends DisplayObjectRenderer
 			context3D.quadsPremultiplied = false;
 			context3D.smoothing = smoothing;
 			context3D.srcRgb = srcRgb;
+			context3D.dstRgb = dstRgb;
+			context3D.srcAlpha = srcAlpha;
+			context3D.dstAlpha = dstAlpha;
 			__quadsOpen = false;
 		}
 	}
@@ -209,14 +317,19 @@ class WgpuRenderer extends DisplayObjectRenderer
 	/**
 		Opens a quad batch on `texture`. Flushes the open batch if texture or blending differ.
 	**/
-	@:noCompletion private function __beginQuads(texture:WgpuTexture, premultiplied:Bool, smooth:Bool):Void
+	@:noCompletion private function __beginQuads(texture:WgpuTexture, premultiplied:Bool, smooth:Bool, multiply:Bool = false):Void
 	{
-		if (__quadsOpen && __quads.texture == texture && __quadsPremultiplied == premultiplied && __quadsSmooth == smooth) return;
+		if (__quadsOpen
+			&& __quads.texture == texture
+			&& __quadsPremultiplied == premultiplied
+			&& __quadsSmooth == smooth
+			&& __quadsMultiply == multiply) return;
 
 		__flush();
 		__quads.begin(texture);
 		__quadsPremultiplied = premultiplied;
 		__quadsSmooth = smooth;
+		__quadsMultiply = multiply;
 		__quadsOpen = true;
 	}
 
@@ -243,6 +356,14 @@ class WgpuRenderer extends DisplayObjectRenderer
 	@:noCompletion private override function __resize(width:Int, height:Int):Void
 	{
 		__projection.createOrtho(0, width, height, 0, -1, 1);
+
+		if (width != __deviceWidth || height != __deviceHeight)
+		{
+			for (texture in __maskTextures) texture.dispose();
+			__maskTextures = [];
+			__deviceWidth = width;
+			__deviceHeight = height;
+		}
 	}
 }
 #end

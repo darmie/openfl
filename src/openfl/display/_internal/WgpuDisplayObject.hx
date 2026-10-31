@@ -13,7 +13,7 @@ class WgpuDisplayObject
 	public static function renderDrawable(displayObject:DisplayObject, renderer:WgpuRenderer):Void
 	{
 		var graphics = displayObject.__graphics;
-		if (graphics == null || !displayObject.__renderable) return;
+		if (graphics == null || !renderer.__canRender(displayObject)) return;
 
 		var alpha = renderer.__getAlpha(displayObject.__worldAlpha);
 		if (alpha <= 0) return;

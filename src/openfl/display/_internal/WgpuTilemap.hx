@@ -31,7 +31,7 @@ class WgpuTilemap
 
 	public static function render(tilemap:Tilemap, renderer:WgpuRenderer):Void
 	{
-		if (!tilemap.__renderable || tilemap.__group.__tiles.length == 0) return;
+		if (!renderer.__canRender(tilemap) || tilemap.__group.__tiles.length == 0) return;
 
 		var alpha = renderer.__getAlpha(tilemap.__worldAlpha);
 		if (alpha <= 0) return;
