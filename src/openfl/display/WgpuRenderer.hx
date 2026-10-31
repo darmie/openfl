@@ -12,6 +12,7 @@ import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 import puffpuff.canvas.Canvas2D;
 import puffpuff.gpu.QuadBatcher;
+import puffpuff.gpu.TriangleBatcher;
 import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 
 /**
@@ -42,6 +43,11 @@ class WgpuRenderer extends DisplayObjectRenderer
 	@:noCompletion private var __quadsPremultiplied:Bool;
 	@:noCompletion private var __quadsSmooth:Bool;
 	@:noCompletion private var __quadsMultiply:Bool;
+	@:noCompletion private var __triangles:TriangleBatcher;
+	@:noCompletion private var __trianglesOpen:Bool;
+	@:noCompletion private var __trianglesPremultiplied:Bool;
+	@:noCompletion private var __trianglesSmooth:Bool;
+	@:noCompletion private var __white:WgpuTexture;
 	@:noCompletion private var __vectorsOpen:Bool;
 	@:noCompletion private var __clipRects:Array<Rectangle> = [];
 	@:noCompletion private var __numClipRects = 0;
@@ -62,6 +68,7 @@ class WgpuRenderer extends DisplayObjectRenderer
 		__projection = new Matrix4();
 		canvas = new Canvas2D(context.wgpu.context3D);
 		__quads = new QuadBatcher(context.wgpu.context3D);
+		__triangles = new TriangleBatcher(context.wgpu.context3D);
 	}
 
 	@:noCompletion private override function __clear():Void
@@ -85,6 +92,7 @@ class WgpuRenderer extends DisplayObjectRenderer
 	{
 		__vectorsOpen = false;
 		__quadsOpen = false;
+		__trianglesOpen = false;
 		__numClipRects = 0;
 		__blendMode = NORMAL;
 		__maskObjects = [];
@@ -379,6 +387,54 @@ class WgpuRenderer extends DisplayObjectRenderer
 			__restoreBlend(context3D, saved);
 			__quadsOpen = false;
 		}
+
+		if (__trianglesOpen)
+		{
+			var context3D = __context.wgpu.context3D;
+			var saved = __saveBlend(context3D);
+			var smoothing = context3D.smoothing;
+
+			__applyBlendMode(context3D, __trianglesPremultiplied);
+			context3D.trianglesPremultiplied = __trianglesPremultiplied;
+			context3D.smoothing = __trianglesSmooth;
+			__triangles.flush(__projection);
+			context3D.trianglesPremultiplied = false;
+			context3D.smoothing = smoothing;
+			__restoreBlend(context3D, saved);
+			__trianglesOpen = false;
+		}
+	}
+
+	/**
+		Opens a triangle batch on `texture` (1x1 white if `null`). Flushes the open batch if texture or sampling differ.
+	**/
+	@:noCompletion private function __beginTriangles(texture:WgpuTexture, premultiplied:Bool, smooth:Bool, repeat:Bool):Void
+	{
+		if (texture == null)
+		{
+			if (__white == null)
+			{
+				__white = __context.wgpu.context3D.createTexture(1, 1);
+				var pixel = haxe.io.Bytes.alloc(4);
+				pixel.fill(0, 4, 255);
+				__white.uploadFromBytes(pixel);
+			}
+
+			texture = __white;
+			premultiplied = false;
+		}
+
+		if (__trianglesOpen
+			&& __triangles.texture == texture
+			&& __triangles.repeat == repeat
+			&& __trianglesPremultiplied == premultiplied
+			&& __trianglesSmooth == smooth) return;
+
+		__flush();
+		__triangles.begin(texture, repeat);
+		__trianglesPremultiplied = premultiplied;
+		__trianglesSmooth = smooth;
+		__trianglesOpen = true;
 	}
 
 	/**

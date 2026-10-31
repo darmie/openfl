@@ -7,6 +7,7 @@ import openfl.display.GradientType;
 import openfl.display.Graphics;
 import openfl.display.JointStyle;
 import openfl.display.SpreadMethod;
+import openfl.display.TriangleCulling;
 import openfl.display.WgpuRenderer;
 import openfl.geom.ColorTransform;
 import openfl.geom.Matrix;
@@ -17,12 +18,14 @@ import puffpuff.canvas.Paint;
 import puffpuff.canvas.Paint.PaintKind;
 import puffpuff.canvas.Path;
 import puffpuff.canvas.Stroke;
+import puffpuff.gpu.TriangleBatcher;
+import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 
 /**
-	Draws the commands of a `Graphics` with `Canvas2D`, and its `drawQuads` with textured quads: solid and gradient fills and line styles, with the
-	nonzero and even-odd rules. Gradients take up to four stops, pad, reflect and repeat spreads and any
-	gradient matrix; the focal point and linearRGB interpolation are not applied. The fill and the stroke accumulate separate paths, because a line
-	style change ends the stroke segment but not the fill.
+	Draws `Graphics` commands with `Canvas2D`: solid and gradient fills and line styles, nonzero and even-odd.
+	`drawQuads`, `drawTriangles` and bitmap-filled rectangles use textured quads and triangles. Gradients: four stops,
+	pad/reflect/repeat, any matrix, no focal point or linearRGB. Fill and stroke keep separate paths, since a line style
+	change ends the stroke segment but not the fill.
 **/
 @:access(openfl.display.Graphics)
 @:access(openfl.display.WgpuRenderer)
@@ -50,7 +53,11 @@ class WgpuGraphics
 
 				case BEGIN_BITMAP_FILL:
 					var c = data.readBeginBitmapFill();
-					state.beginBitmapFill(c.bitmap, c.smooth);
+					state.beginBitmapFill(c.bitmap, c.matrix, c.repeat, c.smooth);
+
+				case DRAW_TRIANGLES:
+					var c = data.readDrawTriangles();
+					state.drawTriangles(c.vertices, c.indices, c.uvtData, c.culling);
 
 				case DRAW_QUADS:
 					var c = data.readDrawQuads();
@@ -131,6 +138,9 @@ private class WgpuGraphicsState
 	private var colorTransform:ColorTransform;
 	private var bitmap:BitmapData;
 	private var bitmapSmooth:Bool;
+	private var bitmapRepeat:Bool;
+	private var bitmapMatrix:Matrix;
+	private var solidRgba:Int;
 	private var alpha:Float;
 	private var fillPaint:Paint;
 	private var fillPath:Path;
@@ -151,11 +161,14 @@ private class WgpuGraphicsState
 	public function beginFill(color:Int, fillAlpha:Float):Void
 	{
 		beginPaint(fillAlpha < 0.005 ? null : Paint.solid(WgpuColor.rgb(color, colorTransform), fillAlpha));
+		solidRgba = fillAlpha < 0.005 ? 0 : rgba(WgpuColor.rgb(color, colorTransform), WgpuColor.alpha(fillAlpha, colorTransform) * alpha);
 	}
 
 	public function beginPaint(paint:Paint):Void
 	{
 		flushFill();
+		bitmap = null;
+		solidRgba = 0;
 		fillPaint = paint;
 		fillPath = paint == null ? null : new Path().moveTo(x, y);
 	}
@@ -205,14 +218,155 @@ private class WgpuGraphicsState
 	}
 
 	/**
-		The bitmap `drawQuads` samples. Paths filled with a bitmap are not drawn yet, so a bitmap fill ends any
-		other fill.
+		Bitmap sampled by `drawQuads`, `drawTriangles` and `drawRect`. Other bitmap-filled paths aren't drawn yet, so a
+		bitmap fill ends any other fill.
 	**/
-	public function beginBitmapFill(bitmapData:BitmapData, smooth:Bool):Void
+	public function beginBitmapFill(bitmapData:BitmapData, matrix:Matrix, repeat:Bool, smooth:Bool):Void
 	{
 		beginPaint(null);
 		bitmap = bitmapData;
+		bitmapMatrix = matrix;
+		bitmapRepeat = repeat;
 		bitmapSmooth = smooth;
+	}
+
+	/** 8-bit tint with red in the low byte, as `TriangleBatcher` wants. **/
+	private static function rgba(rgb:Int, a:Float):Int
+	{
+		var alpha = Math.round((a < 0 ? 0 : (a > 1 ? 1 : a)) * 255);
+		return ((rgb >> 16) & 0xFF) | (rgb & 0xFF00) | ((rgb & 0xFF) << 16) | (alpha << 24);
+	}
+
+	/**
+		Draws triangles with the current fill. Bitmap fill uses `uvtData` (two or three values per vertex, third is
+		perspective), or the vertex position within the bounds if there's none. Solid fill just colors them. `culling`
+		drops triangles by winding.
+	**/
+	public function drawTriangles(vertices:Vector<Float>, indices:Vector<Int>, uvtData:Vector<Float>, culling:TriangleCulling):Void
+	{
+		flushFill();
+		flushStroke();
+
+		if (vertices == null || vertices.length < 6) return;
+
+		var texture:WgpuTexture = null;
+		var tint = 0xFFFFFFFF;
+		var smooth = false;
+		var repeat = false;
+		var premultiplied = false;
+		var invW = 1.0, invH = 1.0;
+
+		if (bitmap != null)
+		{
+			texture = WgpuBitmap.texture(bitmap, renderer.__context.wgpu.context3D);
+			if (texture == null) return;
+
+			premultiplied = WgpuBitmap.isPremultiplied(bitmap);
+			smooth = renderer.__allowSmoothing && bitmapSmooth;
+			repeat = bitmapRepeat;
+			invW = 1 / texture.width;
+			invH = 1 / texture.height;
+			tint = rgba(WgpuColor.tint(colorTransform), WgpuColor.alpha(1, colorTransform) * alpha);
+		}
+		else
+		{
+			if (solidRgba == 0) return;
+			tint = solidRgba;
+		}
+
+		var numVertices = Math.floor(vertices.length / 2);
+		var hasUV = bitmap != null && uvtData != null && uvtData.length >= numVertices * 2;
+		var stride = hasUV && uvtData.length >= numVertices * 3 ? 3 : 2;
+		var length = indices != null ? indices.length : numVertices;
+
+		renderer.__beginTriangles(texture, premultiplied, smooth, repeat);
+		var triangles = renderer.__triangles;
+
+		var i = 0;
+		while (i + 2 < length)
+		{
+			var i0 = indices != null ? indices[i] : i;
+			var i1 = indices != null ? indices[i + 1] : i + 1;
+			var i2 = indices != null ? indices[i + 2] : i + 2;
+			i += 3;
+
+			var x0 = vertices[i0 * 2], y0 = vertices[i0 * 2 + 1];
+			var x1 = vertices[i1 * 2], y1 = vertices[i1 * 2 + 1];
+			var x2 = vertices[i2 * 2], y2 = vertices[i2 * 2 + 1];
+
+			// Winding as authored. GL renderer culls on this sign before any transform.
+			var area = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0);
+			switch (culling)
+			{
+				case POSITIVE: if (area >= 0) continue;
+				case NEGATIVE: if (area <= 0) continue;
+				default:
+			}
+
+			emit(triangles, x0, y0, i0, hasUV, uvtData, stride, tint, invW, invH);
+			emit(triangles, x1, y1, i1, hasUV, uvtData, stride, tint, invW, invH);
+			emit(triangles, x2, y2, i2, hasUV, uvtData, stride, tint, invW, invH);
+		}
+	}
+
+	private inline function emit(triangles:TriangleBatcher, x:Float, y:Float, index:Int, hasUV:Bool, uvt:Vector<Float>, stride:Int, tint:Int, invW:Float,
+			invH:Float):Void
+	{
+		var u:Float, v:Float, t = 1.0;
+		if (hasUV)
+		{
+			u = uvt[index * stride];
+			v = uvt[index * stride + 1];
+			if (stride == 3) t = uvt[index * stride + 2];
+		}
+		else
+		{
+			// No texture coordinates: vertex maps to the bitmap pixel at its own position.
+			u = x * invW;
+			v = y * invH;
+		}
+
+		triangles.vertex(local.a * x + local.c * y + local.e, local.b * x + local.d * y + local.f, u, v, t, tint);
+	}
+
+	/**
+		Draws a rectangle filled with the bitmap. Inverse of the fill matrix gives each corner's bitmap position.
+	**/
+	private function bitmapRect(rx:Float, ry:Float, w:Float, h:Float):Void
+	{
+		var texture = WgpuBitmap.texture(bitmap, renderer.__context.wgpu.context3D);
+		if (texture == null) return;
+
+		var m = bitmapMatrix;
+		var det = m == null ? 1.0 : m.a * m.d - m.b * m.c;
+		if (det == 0) return;
+
+		var ia = 1.0, ib = 0.0, ic = 0.0, id = 1.0, itx = 0.0, ity = 0.0;
+		if (m != null)
+		{
+			ia = m.d / det;
+			ib = -m.b / det;
+			ic = -m.c / det;
+			id = m.a / det;
+			itx = -(ia * m.tx + ic * m.ty);
+			ity = -(ib * m.tx + id * m.ty);
+		}
+
+		var invW = 1 / texture.width;
+		var invH = 1 / texture.height;
+		var tint = rgba(WgpuColor.tint(colorTransform), WgpuColor.alpha(1, colorTransform) * alpha);
+
+		renderer.__beginTriangles(texture, WgpuBitmap.isPremultiplied(bitmap), renderer.__allowSmoothing && bitmapSmooth, bitmapRepeat);
+		var triangles = renderer.__triangles;
+
+		var xs = [rx, rx + w, rx, rx, rx + w, rx + w];
+		var ys = [ry, ry, ry + h, ry + h, ry, ry + h];
+		for (k in 0...6)
+		{
+			var x = xs[k], y = ys[k];
+			triangles.vertex(local.a * x + local.c * y + local.e, local.b * x + local.d * y + local.f, (ia * x + ic * y + itx) * invW,
+				(ib * x + id * y + ity) * invH, 1, tint);
+		}
 	}
 
 	/**
@@ -359,6 +513,12 @@ private class WgpuGraphicsState
 
 	public function drawRect(rx:Float, ry:Float, w:Float, h:Float):Void
 	{
+		if (bitmap != null)
+		{
+			flushStroke();
+			bitmapRect(rx, ry, w, h);
+		}
+
 		if (fillPath != null) fillPath.rect(rx, ry, w, h);
 		if (strokePath != null) strokePath.rect(rx, ry, w, h);
 		x = rx;
