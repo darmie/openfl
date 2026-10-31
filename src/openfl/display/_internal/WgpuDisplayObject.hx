@@ -16,7 +16,7 @@ class WgpuDisplayObject
 		var graphics = displayObject.__graphics;
 		if (graphics == null || !renderer.__canRender(displayObject)) return;
 
-		var colorTransform = displayObject.__worldColorTransform;
+		var colorTransform = renderer.__worldColor(displayObject.__worldColorTransform);
 		var alpha = WgpuColor.alpha(renderer.__getAlpha(displayObject.__worldAlpha), colorTransform);
 		if (alpha <= 0) return;
 

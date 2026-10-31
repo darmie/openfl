@@ -6,6 +6,8 @@ import lime.graphics.PixelFormat;
 import openfl.display.Bitmap;
 import openfl.display.BitmapData;
 import openfl.display.WgpuRenderer;
+import openfl.geom.ColorTransform;
+import openfl.geom.Matrix;
 import puffpuff.gpu.WgpuContext3D;
 import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 
@@ -16,13 +18,16 @@ import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 @:access(openfl.display.Bitmap)
 @:access(openfl.display.BitmapData)
 @:access(openfl.display.DisplayObject)
+@:access(openfl.geom.ColorTransform)
+@:access(openfl.geom.Matrix)
 class WgpuBitmap
 {
 	public static function renderDrawable(bitmap:Bitmap, renderer:WgpuRenderer):Void
 	{
-		if (bitmap.__bitmapData != null && bitmap.__bitmapData.image != null)
+		var bitmapData = bitmap.__bitmapData;
+		if (bitmapData != null && !bitmapData.__wgpuDirty && bitmapData.image != null)
 		{
-			bitmap.__imageVersion = bitmap.__bitmapData.image.version;
+			bitmap.__imageVersion = bitmapData.image.version;
 		}
 
 		WgpuDisplayObject.renderDrawable(bitmap, renderer);
@@ -36,7 +41,7 @@ class WgpuBitmap
 		var bitmapData = bitmap.__bitmapData;
 		if (bitmapData == null || !bitmapData.__isValid || !bitmapData.readable) return;
 
-		var colorTransform = bitmap.__worldColorTransform;
+		var colorTransform = renderer.__worldColor(bitmap.__worldColorTransform);
 		var alpha = WgpuColor.alpha(renderer.__getAlpha(bitmap.__worldAlpha), colorTransform);
 		if (alpha <= 0) return;
 
@@ -45,10 +50,31 @@ class WgpuBitmap
 
 		renderer.__setBlendMode(bitmap.__worldBlendMode);
 		renderer.__pushMaskObject(bitmap);
+		drawQuad(renderer, bitmapData, texture, bitmap.__renderTransform, alpha, colorTransform, renderer.__allowSmoothing && bitmap.smoothing);
+		renderer.__popMaskObject(bitmap);
+	}
 
-		renderer.__beginQuads(texture, isPremultiplied(bitmapData), renderer.__allowSmoothing && bitmap.smoothing);
+	/** Draws a `BitmapData` that is drawn directly, for example the source of `BitmapData.draw`. **/
+	public static function renderBitmapData(bitmapData:BitmapData, renderer:WgpuRenderer):Void
+	{
+		if (!bitmapData.__isValid || !bitmapData.readable) return;
 
-		var transform = bitmap.__renderTransform;
+		var colorTransform = renderer.__worldColor(bitmapData.__worldColorTransform);
+		var alpha = WgpuColor.alpha(renderer.__getAlpha(bitmapData.__worldAlpha), colorTransform);
+		if (alpha <= 0) return;
+
+		var texture = WgpuBitmap.texture(bitmapData, renderer.__context.wgpu.context3D);
+		if (texture == null) return;
+
+		renderer.__setBlendMode(NORMAL);
+		drawQuad(renderer, bitmapData, texture, bitmapData.__renderTransform, alpha, colorTransform, renderer.__allowSmoothing);
+	}
+
+	private static function drawQuad(renderer:WgpuRenderer, bitmapData:BitmapData, texture:WgpuTexture, transform:Matrix, alpha:Float,
+			colorTransform:ColorTransform, smooth:Bool):Void
+	{
+		renderer.__beginQuads(texture, isPremultiplied(bitmapData), smooth);
+
 		var world = renderer.__worldTransform;
 		var a = transform.a, b = transform.b, c = transform.c, d = transform.d, tx = transform.tx, ty = transform.ty;
 		if (world != null)
@@ -70,12 +96,13 @@ class WgpuBitmap
 		var width = bitmapData.width;
 		var height = bitmapData.height;
 		renderer.__quads.addQuad(a * width, b * width, c * height, d * height, tx, ty, 0, 0, 1, 1, alpha, WgpuColor.tint(colorTransform));
-		renderer.__popMaskObject(bitmap);
 	}
 
 	/** Whether `bitmapData` is premultiplied. Blending needs it. **/
 	public static function isPremultiplied(bitmapData:BitmapData):Bool
 	{
+		if (bitmapData.__wgpuDirty) return bitmapData.transparent;
+
 		var image = bitmapData.image;
 		return image != null && image.premultiplied && image.transparent;
 	}
@@ -83,6 +110,9 @@ class WgpuBitmap
 	/** GPU texture for `bitmapData`. Uploaded when new or changed. **/
 	public static function texture(bitmapData:BitmapData, context3D:WgpuContext3D):WgpuTexture
 	{
+		// Drawn pixels live in the texture until the image reads them back.
+		if (bitmapData.__wgpuDirty) return bitmapData.__wgpuTexture;
+
 		var image = bitmapData.image;
 		if (image == null || image.buffer == null || image.buffer.data == null) return null;
 

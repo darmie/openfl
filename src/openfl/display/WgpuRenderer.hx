@@ -8,6 +8,7 @@ import openfl.display._internal.WgpuDisplayObject;
 import openfl.display._internal.WgpuDisplayObjectContainer;
 import openfl.display._internal.WgpuTextField;
 import openfl.display._internal.WgpuTilemap;
+import openfl.geom.ColorTransform;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 import puffpuff.canvas.Canvas2D;
@@ -25,6 +26,7 @@ import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 #end
 @:access(openfl.display.DisplayObject)
 @:access(openfl.display.IBitmapDrawable)
+@:access(openfl.geom.ColorTransform)
 @:access(openfl.geom.Matrix)
 @:access(openfl.geom.Rectangle)
 @:access(openfl.display.Stage)
@@ -57,6 +59,8 @@ class WgpuRenderer extends DisplayObjectRenderer
 	@:noCompletion private var __maskObjects:Array<DisplayObject> = [];
 	@:noCompletion private var __maskTargets:Array<WgpuTexture> = [];
 	@:noCompletion private var __target:WgpuTexture;
+	@:noCompletion private var __baseTarget:WgpuTexture;
+	@:noCompletion private var __objectColorTransform:ColorTransform = new ColorTransform();
 	@:noCompletion private var __renderingMask = 0;
 
 	@:noCompletion private function new(context:RenderContext)
@@ -90,6 +94,37 @@ class WgpuRenderer extends DisplayObjectRenderer
 
 	@:noCompletion private override function __render(object:IBitmapDrawable):Void
 	{
+		__begin();
+		__renderDrawable(object);
+		__end();
+	}
+
+	/**
+		Draws `object` into `target`, keeping what it holds, with an optional clip. Uses an offscreen context
+		with no window frame.
+	**/
+	@:noCompletion private function __renderToTexture(object:IBitmapDrawable, target:WgpuTexture, clipRect:Rectangle, clipMatrix:Matrix):Void
+	{
+		var wgpu = __context.wgpu;
+		wgpu.beginOffscreen(target.view, target.width, target.height);
+		__resize(target.width, target.height);
+		__baseTarget = target;
+		__setTarget(target, false);
+
+		__begin();
+		if (clipRect != null) __pushMaskRect(clipRect, clipMatrix);
+		__renderDrawable(object);
+		if (clipRect != null) __popMaskRect();
+		__end();
+
+		__baseTarget = null;
+		__target = null;
+		wgpu.context3D.setRenderToBackBuffer();
+		wgpu.endOffscreen();
+	}
+
+	@:noCompletion private function __begin():Void
+	{
 		__vectorsOpen = false;
 		__quadsOpen = false;
 		__trianglesOpen = false;
@@ -97,9 +132,12 @@ class WgpuRenderer extends DisplayObjectRenderer
 		__blendMode = NORMAL;
 		__maskObjects = [];
 		__maskTargets = [];
-		__target = null;
+		__target = __baseTarget;
 		__context.wgpu.context3D.disableScissor();
-		__renderDrawable(object);
+	}
+
+	@:noCompletion private function __end():Void
+	{
 		__setBlendMode(NORMAL);
 		__flush();
 		__context.wgpu.context3D.disableScissor();
@@ -171,6 +209,7 @@ class WgpuRenderer extends DisplayObjectRenderer
 	/** Draws `texture`, the size of the target, over the whole target. **/
 	@:noCompletion private override function __setBlendMode(value:BlendMode):Void
 	{
+		if (__overrideBlendMode != null) value = __overrideBlendMode;
 		if (value == null) value = NORMAL;
 
 		if (__blendMode != value)
@@ -239,6 +278,16 @@ class WgpuRenderer extends DisplayObjectRenderer
 			default:
 				context3D.srcRgb = source;
 		}
+	}
+
+	/** `value` with the renderer's world color transform applied. Valid until the next call. **/
+	@:noCompletion private function __worldColor(value:ColorTransform):ColorTransform
+	{
+		if (__worldColorTransform == null) return value;
+
+		__objectColorTransform.__copyFrom(value);
+		__objectColorTransform.__combine(__worldColorTransform);
+		return __objectColorTransform;
 	}
 
 	/** Whether to draw `object`. Skips hidden objects and masks, unless the mask itself is drawn as coverage. **/
@@ -474,6 +523,8 @@ class WgpuRenderer extends DisplayObjectRenderer
 
 		switch (object.__drawableType)
 		{
+			case BITMAP_DATA:
+				WgpuBitmap.renderBitmapData(cast object, this);
 			case STAGE, SPRITE:
 				WgpuDisplayObjectContainer.renderDrawable(cast object, this);
 			case SHAPE:

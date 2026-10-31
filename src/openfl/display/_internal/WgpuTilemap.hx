@@ -33,7 +33,7 @@ class WgpuTilemap
 	{
 		if (!renderer.__canRender(tilemap) || tilemap.__group.__tiles.length == 0) return;
 
-		var colorTransform = tilemap.__worldColorTransform;
+		var colorTransform = renderer.__worldColor(tilemap.__worldColorTransform);
 		var alpha = WgpuColor.alpha(renderer.__getAlpha(tilemap.__worldAlpha), colorTransform);
 		if (alpha <= 0) return;
 

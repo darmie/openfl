@@ -31,7 +31,7 @@ class WgpuTextField
 
 		if (!renderer.__canRender(textField)) return;
 
-		var colorTransform = textField.__worldColorTransform;
+		var colorTransform = renderer.__worldColor(textField.__worldColorTransform);
 		var alpha = WgpuColor.alpha(renderer.__getAlpha(textField.__worldAlpha), colorTransform);
 		if (alpha <= 0) return;
 

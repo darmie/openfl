@@ -158,7 +158,11 @@ class BitmapData implements IBitmapDrawable
 		In Flash Player, this property is always `null`.
 	**/
 	@SuppressWarnings("checkstyle:Dynamic")
+	#if openfl_wgpu
+	@:isVar public var image(get, null):#if lime Image #else Dynamic #end;
+	#else
 	public var image(default, null):#if lime Image #else Dynamic #end;
+	#end
 
 	/**
 		Defines whether the bitmap image is readable. Hardware-only bitmap images
@@ -224,6 +228,8 @@ class BitmapData implements IBitmapDrawable
 	#if openfl_wgpu
 	@:noCompletion private var __wgpuTexture:puffpuff.gpu.WgpuContext3D.WgpuTexture;
 	@:noCompletion private var __wgpuTextureVersion:Int = -1;
+	/** The texture holds drawn pixels that `image` doesn't have yet. **/
+	@:noCompletion private var __wgpuDirty:Bool = false;
 	#end
 	@:noCompletion private var __transform:Matrix;
 	@:noCompletion private var __uvRect:Rectangle;
@@ -793,6 +799,7 @@ class BitmapData implements IBitmapDrawable
 		__framebuffer = null;
 		__framebufferContext = null;
 		#if openfl_wgpu
+		__wgpuDirty = false;
 		if (__wgpuTexture != null)
 		{
 			__wgpuTexture.dispose();
@@ -965,6 +972,20 @@ class BitmapData implements IBitmapDrawable
 		_colorTransform.__copyFrom(source.__worldColorTransform);
 		_colorTransform.__invert();
 
+		#if openfl_wgpu
+		if (colorTransform != null)
+		{
+			_colorTransform.__combine(colorTransform);
+		}
+
+		openfl.display._internal.WgpuBitmapData.draw(this, source, transform, 1 / source.__worldAlpha, _colorTransform, blendMode, clipRect, clipMatrix,
+			smoothing);
+
+		if (clipRect != null)
+		{
+			Matrix.__pool.release(clipMatrix);
+		}
+		#else
 		if (!readable && Lib.current.stage.context3D != null)
 		{
 			if (__textureContext == null)
@@ -1066,6 +1087,8 @@ class BitmapData implements IBitmapDrawable
 			}
 			#end
 		}
+
+		#end
 
 		Matrix.__pool.release(transform);
 
@@ -3339,6 +3362,14 @@ class BitmapData implements IBitmapDrawable
 		}
 		#end
 	}
+
+	#if openfl_wgpu
+	@:noCompletion private function get_image():#if lime Image #else Dynamic #end
+	{
+		if (__wgpuDirty) openfl.display._internal.WgpuBitmapData.sync(this);
+		return image;
+	}
+	#end
 
 	@:noCompletion private function __getBounds(rect:Rectangle, matrix:Matrix):Void
 	{
