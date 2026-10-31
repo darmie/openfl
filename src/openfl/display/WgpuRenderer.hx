@@ -45,6 +45,10 @@ class WgpuRenderer extends DisplayObjectRenderer
 	@:noCompletion private var __quadsPremultiplied:Bool;
 	@:noCompletion private var __quadsSmooth:Bool;
 	@:noCompletion private var __quadsMultiply:Bool;
+	@:noCompletion private var __offsetQuads:QuadBatcher;
+	@:noCompletion private var __offsetQuadsOpen:Bool;
+	@:noCompletion private var __offsetQuadsPremultiplied:Bool;
+	@:noCompletion private var __offsetQuadsSmooth:Bool;
 	@:noCompletion private var __triangles:TriangleBatcher;
 	@:noCompletion private var __trianglesOpen:Bool;
 	@:noCompletion private var __trianglesPremultiplied:Bool;
@@ -72,6 +76,7 @@ class WgpuRenderer extends DisplayObjectRenderer
 		__projection = new Matrix4();
 		canvas = new Canvas2D(context.wgpu.context3D);
 		__quads = new QuadBatcher(context.wgpu.context3D);
+		__offsetQuads = new QuadBatcher(context.wgpu.context3D, 256, true);
 		__triangles = new TriangleBatcher(context.wgpu.context3D);
 	}
 
@@ -127,6 +132,7 @@ class WgpuRenderer extends DisplayObjectRenderer
 	{
 		__vectorsOpen = false;
 		__quadsOpen = false;
+		__offsetQuadsOpen = false;
 		__trianglesOpen = false;
 		__numClipRects = 0;
 		__blendMode = NORMAL;
@@ -437,6 +443,23 @@ class WgpuRenderer extends DisplayObjectRenderer
 			__quadsOpen = false;
 		}
 
+		if (__offsetQuadsOpen)
+		{
+			var context3D = __context.wgpu.context3D;
+			var saved = __saveBlend(context3D);
+			var smoothing = context3D.smoothing;
+
+			// Output color is always premultiplied.
+			__applyBlendMode(context3D, true);
+			context3D.quadsPremultiplied = __offsetQuadsPremultiplied;
+			context3D.smoothing = __offsetQuadsSmooth;
+			__offsetQuads.flush(__projection);
+			context3D.quadsPremultiplied = false;
+			context3D.smoothing = smoothing;
+			__restoreBlend(context3D, saved);
+			__offsetQuadsOpen = false;
+		}
+
 		if (__trianglesOpen)
 		{
 			var context3D = __context.wgpu.context3D;
@@ -515,6 +538,23 @@ class WgpuRenderer extends DisplayObjectRenderer
 		__quadsSmooth = smooth;
 		__quadsMultiply = multiply;
 		__quadsOpen = true;
+	}
+
+	/**
+		Opens a batch of quads with a colour transform on `texture`, as `__beginQuads` does for plain ones.
+	**/
+	@:noCompletion private function __beginOffsetQuads(texture:WgpuTexture, premultiplied:Bool, smooth:Bool):Void
+	{
+		if (__offsetQuadsOpen
+			&& __offsetQuads.texture == texture
+			&& __offsetQuadsPremultiplied == premultiplied
+			&& __offsetQuadsSmooth == smooth) return;
+
+		__flush();
+		__offsetQuads.begin(texture);
+		__offsetQuadsPremultiplied = premultiplied;
+		__offsetQuadsSmooth = smooth;
+		__offsetQuadsOpen = true;
 	}
 
 	@:noCompletion private function __renderDrawable(object:IBitmapDrawable):Void

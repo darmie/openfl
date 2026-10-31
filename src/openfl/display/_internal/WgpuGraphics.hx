@@ -9,6 +9,7 @@ import openfl.display.JointStyle;
 import openfl.display.SpreadMethod;
 import openfl.display.TriangleCulling;
 import openfl.display.WgpuRenderer;
+import openfl.display3D.Context3DTextureFilter;
 import openfl.geom.ColorTransform;
 import openfl.geom.Matrix;
 import openfl.Vector;
@@ -61,6 +62,14 @@ class WgpuGraphics
 				case DRAW_TRIANGLES:
 					var c = data.readDrawTriangles();
 					state.drawTriangles(c.vertices, c.indices, c.uvtData, c.culling);
+
+				case BEGIN_SHADER_FILL:
+					var c = data.readBeginShaderFill();
+					state.beginShaderFill(c.shaderBuffer);
+
+				case OVERRIDE_BLEND_MODE:
+					var c = data.readOverrideBlendMode();
+					renderer.__setBlendMode(c.blendMode);
 
 				case DRAW_QUADS:
 					var c = data.readDrawQuads();
@@ -355,6 +364,8 @@ private class WgpuGraphicsState
 	private var bitmapSmooth:Bool;
 	private var bitmapRepeat:Bool;
 	private var bitmapMatrix:Matrix;
+	private var shaderBuffer:ShaderBuffer;
+	private var paramLength:Int;
 	private var solidRgba:Int;
 	private var alpha:Float;
 	private var fillPaint:Paint;
@@ -413,6 +424,7 @@ private class WgpuGraphicsState
 	{
 		flushFill();
 		bitmap = null;
+		shaderBuffer = null;
 		solidRgba = 0;
 		fillPaint = paint;
 		fillPath = paint == null ? null : new Path().moveTo(x, y);
@@ -452,6 +464,56 @@ private class WgpuGraphicsState
 		fillPaint = null;
 		fillPath = null;
 		bitmap = null;
+		shaderBuffer = null;
+	}
+
+	/**
+		A shader fill draws its `bitmap` input, so a stock or Flixel shader's quads and triangles are textured; the shader's
+		own code is not run. A quad takes the `alpha`, `colorMultiplier` and `colorOffset` values the shader holds for it.
+	**/
+	public function beginShaderFill(buffer:ShaderBuffer):Void
+	{
+		beginPaint(null);
+		if (buffer == null) return;
+
+		for (i in 0...buffer.inputCount)
+		{
+			if (buffer.inputRefs[i].name != "bitmap") continue;
+
+			bitmap = buffer.inputs[i];
+			bitmapMatrix = null;
+			bitmapRepeat = false;
+			bitmapSmooth = buffer.inputFilter[i] != Context3DTextureFilter.NEAREST;
+			shaderBuffer = buffer;
+			break;
+		}
+	}
+
+	/** Where parameter `name` starts in the buffer's values, or -1. Sets `paramLength` to its count. **/
+	private function shaderParam(name:String):Int
+	{
+		if (shaderBuffer == null) return -1;
+
+		for (i in 0...shaderBuffer.paramBoolCount)
+		{
+			if (shaderBuffer.paramRefs_Bool[i].name == name)
+			{
+				paramLength = shaderBuffer.paramLengths[i];
+				return shaderBuffer.paramPositions[i];
+			}
+		}
+
+		var first = shaderBuffer.paramBoolCount;
+		for (i in 0...shaderBuffer.paramFloatCount)
+		{
+			if (shaderBuffer.paramRefs_Float[i].name == name)
+			{
+				paramLength = shaderBuffer.paramLengths[first + i];
+				return shaderBuffer.paramPositions[first + i];
+			}
+		}
+
+		return -1;
 	}
 
 	/**
@@ -631,11 +693,56 @@ private class WgpuGraphicsState
 			else if (transforms.length >= length * 2) position = true;
 		}
 
-		renderer.__beginQuads(texture, WgpuBitmap.isPremultiplied(bitmap), renderer.__allowSmoothing && bitmapSmooth);
-
-		var tint = WgpuColor.tint(colorTransform);
+		var baseTint = WgpuColor.tint(colorTransform);
 		var invW = 1 / texture.width;
 		var invH = 1 / texture.height;
+
+		// Shader's per-vertex values: alpha, color multiplier and color offset (four values each) for each of a quad's
+		// four corners.
+		var values = shaderBuffer != null ? shaderBuffer.paramData : null;
+		var alphaAt = shaderParam("alpha");
+		var alphaLength = paramLength;
+		var multiplyAt = -1, multiplyLength = 0, offsetAt = -1, offsetLength = 0;
+		var flagAt = shaderParam("hasColorTransform");
+		if (flagAt >= 0 && values[flagAt] > 0.5)
+		{
+			multiplyAt = shaderParam("colorMultiplier");
+			multiplyLength = paramLength;
+			offsetAt = shaderParam("colorOffset");
+			offsetLength = paramLength;
+		}
+
+		// Multipliers up to 1 work as a tint. Offset, or multiplier above 1, needs the transform in the shader.
+		var offsets = false;
+		if (multiplyAt >= 0)
+		{
+			for (i in 0...length)
+			{
+				var mi = multiplyAt + i * 16;
+				if (multiplyLength >= i * 16 + 3 && (values[mi] > 1 || values[mi + 1] > 1 || values[mi + 2] > 1))
+				{
+					offsets = true;
+					break;
+				}
+
+				var oi = offsetAt + i * 16;
+				if (offsetAt >= 0 && offsetLength >= i * 16 + 4 && (values[oi] != 0 || values[oi + 1] != 0 || values[oi + 2] != 0 || values[oi + 3] != 0))
+				{
+					offsets = true;
+					break;
+				}
+			}
+		}
+
+		var premultiplied = WgpuBitmap.isPremultiplied(bitmap);
+		var smooth = renderer.__allowSmoothing && bitmapSmooth;
+		if (offsets) renderer.__beginOffsetQuads(texture, premultiplied, smooth);
+		else renderer.__beginQuads(texture, premultiplied, smooth);
+
+		var objectR = colorTransform != null ? colorTransform.redMultiplier : 1.0;
+		var objectG = colorTransform != null ? colorTransform.greenMultiplier : 1.0;
+		var objectB = colorTransform != null ? colorTransform.blueMultiplier : 1.0;
+
 		for (i in 0...length)
 		{
 			var ri = hasIndices ? indices[i] * 4 : i * 4;
@@ -644,6 +751,28 @@ private class WgpuGraphicsState
 			var w = rects[ri + 2];
 			var h = rects[ri + 3];
 			if (w <= 0 || h <= 0) continue;
+
+			var quadAlpha = alpha;
+			var tint = baseTint;
+			var mr = objectR, mg = objectG, mb = objectB;
+			var oR = 0.0, oG = 0.0, oB = 0.0, oA = 0.0;
+			if (alphaAt >= 0 && alphaLength > i * 4) quadAlpha *= values[alphaAt + i * 4];
+			if (multiplyAt >= 0 && multiplyLength >= i * 16 + 3)
+			{
+				var mi = multiplyAt + i * 16;
+				mr *= values[mi];
+				mg *= values[mi + 1];
+				mb *= values[mi + 2];
+				tint = WgpuColor.pack(mr, mg, mb);
+			}
+			if (offsets && offsetAt >= 0 && offsetLength >= i * 16 + 4)
+			{
+				var oi = offsetAt + i * 16;
+				oR = values[oi] / 255;
+				oG = values[oi + 1] / 255;
+				oB = values[oi + 2] / 255;
+				oA = values[oi + 3] / 255;
+			}
 
 			var ta = 1.0, tb = 0.0, tc = 0.0, td = 1.0, tx = 0.0, ty = 0.0;
 			if (matrixAndPosition)
@@ -680,8 +809,16 @@ private class WgpuGraphicsState
 			var b = local.b * ta + local.d * tb;
 			var c = local.a * tc + local.c * td;
 			var d = local.b * tc + local.d * td;
-			renderer.__quads.addQuad(a * w, b * w, c * h, d * h, local.a * tx + local.c * ty + local.e, local.b * tx + local.d * ty + local.f, rects[ri] * invW,
-				rects[ri + 1] * invH, w * invW, h * invH, alpha, tint);
+			if (offsets)
+			{
+				renderer.__offsetQuads.addOffsetQuad(a * w, b * w, c * h, d * h, local.a * tx + local.c * ty + local.e, local.b * tx + local.d * ty + local.f,
+					rects[ri] * invW, rects[ri + 1] * invH, w * invW, h * invH, quadAlpha, mr, mg, mb, oR, oG, oB, oA);
+			}
+			else
+			{
+				renderer.__quads.addQuad(a * w, b * w, c * h, d * h, local.a * tx + local.c * ty + local.e, local.b * tx + local.d * ty + local.f,
+					rects[ri] * invW, rects[ri + 1] * invH, w * invW, h * invH, quadAlpha, tint);
+			}
 		}
 	}
 

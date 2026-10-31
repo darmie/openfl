@@ -4,8 +4,8 @@ package openfl.display._internal;
 import openfl.geom.ColorTransform;
 
 /**
-	A `ColorTransform` applied where the colour is made: to the colours of solid fills, gradient stops and text, and as
-	the tint and alpha of textured quads. Textures take the multipliers only, up to 1; their offsets are not applied.
+	Applies a `ColorTransform` when a color is made: solid fills, gradient stops, text, and tint and alpha of textured
+	quads. Texture tints only use multipliers up to 1. Offsets only apply in `drawQuads`.
 **/
 class WgpuColor
 {
@@ -47,10 +47,14 @@ class WgpuColor
 	{
 		if (transform == null) return 0xFFFFFF;
 
-		var r = clamp(transform.redMultiplier * 255);
-		var g = clamp(transform.greenMultiplier * 255);
-		var b = clamp(transform.blueMultiplier * 255);
-		return (r << 16) | (g << 8) | b;
+		return pack(transform.redMultiplier, transform.greenMultiplier, transform.blueMultiplier);
+	}
+
+	/** Multipliers (0 to 1) as a tint. Black is 0x000001 since a tint of 0 means none. **/
+	public static function pack(red:Float, green:Float, blue:Float):Int
+	{
+		var tint = (clamp(red * 255) << 16) | (clamp(green * 255) << 8) | clamp(blue * 255);
+		return tint == 0 ? 1 : tint;
 	}
 
 	private static inline function clamp(value:Float):Int
