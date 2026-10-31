@@ -7,6 +7,7 @@ import openfl.display._internal.WgpuBitmap;
 import openfl.display._internal.WgpuDisplayObject;
 import openfl.display._internal.WgpuDisplayObjectContainer;
 import openfl.display._internal.WgpuTextField;
+import openfl.display._internal.WgpuTilemap;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
 import puffpuff.canvas.Canvas2D;
@@ -233,6 +234,8 @@ class WgpuRenderer extends DisplayObjectRenderer
 				WgpuBitmap.renderDrawable(cast object, this);
 			case TEXT_FIELD:
 				WgpuTextField.renderDrawable(cast object, this);
+			case TILEMAP:
+				WgpuTilemap.renderDrawable(cast object, this);
 			default:
 		}
 	}
