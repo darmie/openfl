@@ -23,8 +23,8 @@ import puffpuff.gpu.WgpuContext3D.WgpuTexture;
 
 /**
 	Draws `Graphics` commands with `Canvas2D`: solid and gradient fills and line styles, nonzero and even-odd.
-	`drawQuads`, `drawTriangles` and bitmap-filled rectangles use textured quads and triangles. Gradients: four stops,
-	pad/reflect/repeat, any matrix, no focal point or linearRGB. Fill and stroke keep separate paths, since a line style
+	`drawQuads`, `drawTriangles` and bitmap-filled rectangles use textured quads and triangles. Gradients: up to 16 stops,
+	pad/reflect/repeat, any matrix and a radial focal point; no linearRGB, as in the Cairo renderer. Fill and stroke keep separate paths, since a line style
 	change ends the stroke segment but not the fill. `scale9Grid` keeps the nine regions of paths and strokes; bitmap fills,
 	gradients, triangles and quads scale as a whole.
 **/
@@ -51,7 +51,7 @@ class WgpuGraphics
 
 				case BEGIN_GRADIENT_FILL:
 					var c = data.readBeginGradientFill();
-					state.beginPaint(WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod, colorTransform));
+					state.beginPaint(WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod, c.focalPointRatio, colorTransform));
 
 				case BEGIN_BITMAP_FILL:
 					var c = data.readBeginBitmapFill();
@@ -83,7 +83,7 @@ class WgpuGraphics
 
 				case LINE_GRADIENT_STYLE:
 					var c = data.readLineGradientStyle();
-					state.strokePaint = WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod, colorTransform);
+					state.strokePaint = WgpuGraphicsState.gradient(c.type, c.colors, c.alphas, c.ratios, c.matrix, c.spreadMethod, c.focalPointRatio, colorTransform);
 
 				case MOVE_TO:
 					var c = data.readMoveTo();
@@ -212,20 +212,12 @@ private class WgpuGraphicsState
 		radial has radius 819.2.
 	**/
 	public static function gradient(type:GradientType, colors:Array<Int>, alphas:Array<Float>, ratios:Array<Int>, matrix:Matrix, spread:SpreadMethod,
-			colorTransform:ColorTransform = null):Paint
+			focalPointRatio:Float, colorTransform:ColorTransform = null):Paint
 	{
 		var stops = [];
 		for (i in 0...colors.length)
 		{
 			stops.push({offset: ratios[i] / 255, rgb: WgpuColor.rgb(colors[i], colorTransform), alpha: alphas[i]});
-		}
-
-		// A paint holds four stops. Keep first and last, spread the rest evenly.
-		if (stops.length > 4)
-		{
-			var picked = [];
-			for (i in 0...4) picked.push(stops[Math.round(i * (stops.length - 1) / 3)]);
-			stops = picked;
 		}
 
 		var radial = type == RADIAL;
@@ -240,7 +232,7 @@ private class WgpuGraphicsState
 			default: 0;
 		}
 
-		return Paint.boxed(radial ? Radial : Linear, box, stops, spreadMode);
+		return Paint.boxed(radial ? Radial : Linear, box, stops, spreadMode, radial ? focalPointRatio : 0);
 	}
 
 	public function endFill():Void
