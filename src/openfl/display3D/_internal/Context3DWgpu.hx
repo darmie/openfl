@@ -5,6 +5,7 @@ import gpu.BlendFactor;
 import gpu.ColorWrite;
 import gpu.CompareFunction;
 import gpu.CullMode;
+import gpu.StencilOperation;
 import gpu.VertexFormat;
 import openfl.display.Stage;
 import openfl.display.Stage3D;
@@ -37,7 +38,7 @@ class Context3DWgpu
 		setDepthTest(context, true, ALWAYS);
 	}
 
-	public static function clear(context:Context3D, red:Float, green:Float, blue:Float, alpha:Float, depth:Float, mask:UInt):Void
+	public static function clear(context:Context3D, red:Float, green:Float, blue:Float, alpha:Float, depth:Float, stencil:UInt, mask:UInt):Void
 	{
 		var wgpu = context.__wgpu;
 		wgpu.endRenderPass();
@@ -45,7 +46,8 @@ class Context3DWgpu
 
 		var color = mask & Context3DClearMask.COLOR != 0;
 		var clearDepth = context.__depthEnabled && mask & Context3DClearMask.DEPTH != 0;
-		wgpu.beginRenderPass(color ? red : null, green, blue, alpha, clearDepth ? depth : null);
+		var clearStencil = context.__depthEnabled && mask & Context3DClearMask.STENCIL != 0;
+		wgpu.beginRenderPass(color ? red : null, green, blue, alpha, clearDepth ? depth : null, clearStencil ? stencil & 0xFF : null);
 	}
 
 	public static function configureBackBuffer(context:Context3D, width:Int, height:Int, enableDepthAndStencil:Bool):Void
@@ -94,7 +96,12 @@ class Context3DWgpu
 
 	public static function setDepthTest(context:Context3D, depthMask:Bool, mode:Context3DCompareMode):Void
 	{
-		context.__wgpu.setDepthTest(depthMask, switch (mode)
+		context.__wgpu.setDepthTest(depthMask, compareFunction(mode));
+	}
+
+	private static function compareFunction(mode:Context3DCompareMode):CompareFunction
+	{
+		return switch (mode)
 		{
 			case ALWAYS: CompareFunction.Always;
 			case NEVER: CompareFunction.Never;
@@ -104,7 +111,41 @@ class Context3DWgpu
 			case LESS: CompareFunction.Less;
 			case LESS_EQUAL: CompareFunction.LessEqual;
 			case NOT_EQUAL: CompareFunction.NotEqual;
-		});
+		}
+	}
+
+	private static function stencilOperation(action:Context3DStencilAction):StencilOperation
+	{
+		return switch (action)
+		{
+			case KEEP: StencilOperation.Keep;
+			case ZERO: StencilOperation.Zero;
+			case SET: StencilOperation.Replace;
+			case INVERT: StencilOperation.Invert;
+			case INCREMENT_SATURATE: StencilOperation.IncrementClamp;
+			case DECREMENT_SATURATE: StencilOperation.DecrementClamp;
+			case INCREMENT_WRAP: StencilOperation.IncrementWrap;
+			case DECREMENT_WRAP: StencilOperation.DecrementWrap;
+		}
+	}
+
+	/** One test for front and back faces; the face argument of `setStencilActions` is not used. **/
+	public static function setStencilActions(context:Context3D, compare:Context3DCompareMode, bothPass:Context3DStencilAction,
+			depthFail:Context3DStencilAction, stencilFail:Context3DStencilAction):Void
+	{
+		var wgpu = context.__wgpu;
+		wgpu.stencilCompare = compareFunction(compare);
+		wgpu.stencilPass = stencilOperation(bothPass);
+		wgpu.stencilDepthFail = stencilOperation(depthFail);
+		wgpu.stencilFail = stencilOperation(stencilFail);
+	}
+
+	public static function setStencilReferenceValue(context:Context3D, reference:UInt, readMask:UInt, writeMask:UInt):Void
+	{
+		var wgpu = context.__wgpu;
+		wgpu.stencilReference = reference & 0xFF;
+		wgpu.stencilReadMask = readMask & 0xFF;
+		wgpu.stencilWriteMask = writeMask & 0xFF;
 	}
 
 	public static function setProgram(context:Context3D, program:Program3D):Void

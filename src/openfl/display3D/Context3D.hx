@@ -478,7 +478,7 @@ import lime.math.Vector2;
 			mask:UInt = Context3DClearMask.ALL):Void
 	{
 		#if openfl_wgpu
-		openfl.display3D._internal.Context3DWgpu.clear(this, red, green, blue, alpha, depth, mask);
+		openfl.display3D._internal.Context3DWgpu.clear(this, red, green, blue, alpha, depth, stencil, mask);
 		return;
 		#end
 
@@ -1928,7 +1928,7 @@ import lime.math.Vector2;
 			actionOnDepthPassStencilFail:Context3DStencilAction = KEEP):Void
 	{
 		#if openfl_wgpu
-		// Stencil isn't implemented yet.
+		openfl.display3D._internal.Context3DWgpu.setStencilActions(this, compareMode, actionOnBothPass, actionOnDepthFail, actionOnDepthPassStencilFail);
 		return;
 		#end
 
@@ -1956,6 +1956,7 @@ import lime.math.Vector2;
 	public function setStencilReferenceValue(referenceValue:UInt, readMask:UInt = 0xFF, writeMask:UInt = 0xFF):Void
 	{
 		#if openfl_wgpu
+		openfl.display3D._internal.Context3DWgpu.setStencilReferenceValue(this, referenceValue, readMask, writeMask);
 		return;
 		#end
 
