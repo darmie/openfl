@@ -14,6 +14,7 @@ import openfl.geom.Matrix;
 import openfl.Vector;
 import puffpuff.canvas.Affine;
 import puffpuff.canvas.Canvas2D;
+import puffpuff.canvas.Flatten;
 import puffpuff.canvas.Paint;
 import puffpuff.canvas.Paint.PaintKind;
 import puffpuff.canvas.Path;
@@ -125,6 +126,211 @@ class WgpuGraphics
 		data.destroy();
 		state.finish();
 	}
+
+	/**
+		Whether `(x, y)`, in the graphics' own units, is on a fill or a stroke, as the Cairo renderer decides it: fills by the
+		even-odd rule whatever their color or alpha, strokes by the line width (round caps and joins). Bitmap, gradient and shader
+		fills count as fills. `drawQuads` counts as a hit anywhere in the bounds.
+	**/
+	public static function hitTest(graphics:Graphics, x:Float, y:Float):Bool
+	{
+		var commands = graphics.__commands;
+		if (commands == null || commands.length == 0) return false;
+
+		var probe = new HitProbe(x, y);
+		var state = new WgpuGraphicsState(null, Affine.IDENTITY, 1, null);
+		state.probe = probe;
+		if (!state.useScale9Grid(graphics)) return false;
+		if (state.hasScale9())
+		{
+			probe.x *= graphics.__owner.scaleX;
+			probe.y *= graphics.__owner.scaleY;
+		}
+		var data = new DrawCommandReader(commands);
+
+		for (type in commands.types)
+		{
+			if (probe.hit) break;
+			switch (type)
+			{
+				case BEGIN_FILL:
+					data.readBeginFill();
+					state.beginPaint(HitProbe.PAINT);
+
+				case BEGIN_GRADIENT_FILL:
+					data.readBeginGradientFill();
+					state.beginPaint(HitProbe.PAINT);
+
+				case BEGIN_BITMAP_FILL:
+					data.readBeginBitmapFill();
+					state.beginPaint(HitProbe.PAINT);
+
+				case BEGIN_SHADER_FILL:
+					data.readBeginShaderFill();
+					state.beginPaint(HitProbe.PAINT);
+
+				case END_FILL:
+					data.readEndFill();
+					state.endFill();
+
+				case LINE_STYLE:
+					var c = data.readLineStyle();
+					state.lineStyle(c.thickness, c.color, c.alpha, c.caps, c.joints, c.miterLimit);
+
+				case MOVE_TO:
+					var c = data.readMoveTo();
+					state.moveTo(c.x, c.y);
+
+				case LINE_TO:
+					var c = data.readLineTo();
+					state.lineTo(c.x, c.y);
+
+				case CURVE_TO:
+					var c = data.readCurveTo();
+					state.curveTo(c.controlX, c.controlY, c.anchorX, c.anchorY);
+
+				case CUBIC_CURVE_TO:
+					var c = data.readCubicCurveTo();
+					state.cubicCurveTo(c.controlX1, c.controlY1, c.controlX2, c.controlY2, c.anchorX, c.anchorY);
+
+				case DRAW_RECT:
+					var c = data.readDrawRect();
+					state.drawRect(c.x, c.y, c.width, c.height);
+
+				case DRAW_ROUND_RECT:
+					var c = data.readDrawRoundRect();
+					state.drawRoundRect(c.x, c.y, c.width, c.height, c.ellipseWidth, c.ellipseHeight);
+
+				case DRAW_CIRCLE:
+					var c = data.readDrawCircle();
+					state.drawCircle(c.x, c.y, c.radius);
+
+				case DRAW_ELLIPSE:
+					var c = data.readDrawEllipse();
+					state.drawEllipse(c.x, c.y, c.width, c.height);
+
+				case DRAW_TRIANGLES:
+					var c = data.readDrawTriangles();
+					probe.triangles(c.vertices, c.indices);
+
+				case DRAW_QUADS:
+					data.readDrawQuads();
+					probe.hit = true;
+
+				default:
+					data.skip(type);
+			}
+		}
+
+		data.destroy();
+		if (!probe.hit) state.finish();
+		return probe.hit;
+	}
+}
+
+/** Answers `WgpuGraphics.hitTest` for the paths the state flushes in place of drawing them. **/
+private class HitProbe
+{
+	/** Stands in for the paint of any fill: the state skips a fill without one. **/
+	public static var PAINT:Paint = Paint.solid(0);
+
+	public var x:Float;
+	public var y:Float;
+	public var hit:Bool = false;
+
+	public function new(x:Float, y:Float)
+	{
+		this.x = x;
+		this.y = y;
+	}
+
+	public function fill(path:Path):Void
+	{
+		if (hit) return;
+
+		var inside = false;
+		for (c in Flatten.path(path, Affine.IDENTITY, 0.1))
+		{
+			var n = c.count();
+			if (n < 3) continue;
+			var j = n - 1;
+			for (i in 0...n)
+			{
+				var yi = c.y(i), yj = c.y(j);
+				if ((yi > y) != (yj > y) && x < (c.x(j) - c.x(i)) * (y - yi) / (yj - yi) + c.x(i)) inside = !inside;
+				j = i;
+			}
+		}
+		hit = inside;
+	}
+
+	public function stroke(path:Path, width:Float):Void
+	{
+		if (hit) return;
+
+		var half = Math.max(width, 1) / 2;
+		var limit = half * half;
+		for (c in Flatten.path(path, Affine.IDENTITY, 0.1))
+		{
+			var n = c.count();
+			if (n == 0) continue;
+			if (n == 1 && distance(c.x(0), c.y(0), c.x(0), c.y(0)) <= limit)
+			{
+				hit = true;
+				return;
+			}
+			var segments = c.closed && n > 2 ? n : n - 1;
+			for (i in 0...segments)
+			{
+				var j = (i + 1) % n;
+				if (distance(c.x(i), c.y(i), c.x(j), c.y(j)) <= limit)
+				{
+					hit = true;
+					return;
+				}
+			}
+		}
+	}
+
+	/** Squared distance from the point to the segment. **/
+	private function distance(ax:Float, ay:Float, bx:Float, by:Float):Float
+	{
+		var dx = bx - ax, dy = by - ay;
+		var length = dx * dx + dy * dy;
+		var t = length > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / length)) : 0;
+		var ex = ax + t * dx - x, ey = ay + t * dy - y;
+		return ex * ex + ey * ey;
+	}
+
+	public function triangles(vertices:Vector<Float>, indices:Vector<Int>):Void
+	{
+		if (hit || vertices == null) return;
+
+		var count = indices != null ? indices.length : Std.int(vertices.length / 2);
+		var t = 0;
+		while (t + 2 < count)
+		{
+			var a = indices != null ? indices[t] : t;
+			var b = indices != null ? indices[t + 1] : t + 1;
+			var c = indices != null ? indices[t + 2] : t + 2;
+			if (inside(vertices[a * 2], vertices[a * 2 + 1], vertices[b * 2], vertices[b * 2 + 1], vertices[c * 2], vertices[c * 2 + 1]))
+			{
+				hit = true;
+				return;
+			}
+			t += 3;
+		}
+	}
+
+	private function inside(ax:Float, ay:Float, bx:Float, by:Float, cx:Float, cy:Float):Bool
+	{
+		var d1 = (x - bx) * (ay - by) - (ax - bx) * (y - by);
+		var d2 = (x - cx) * (by - cy) - (bx - cx) * (y - cy);
+		var d3 = (x - ax) * (cy - ay) - (cx - ax) * (y - ay);
+		var negative = d1 < 0 || d2 < 0 || d3 < 0;
+		var positive = d1 > 0 || d2 > 0 || d3 > 0;
+		return !(negative && positive);
+	}
 }
 
 @:access(openfl.display.DisplayObject)
@@ -138,6 +344,8 @@ private class WgpuGraphicsState
 
 	private var renderer:WgpuRenderer;
 	private var canvas:Canvas2D;
+	/** Set when the state answers a hit test: paths go to it and nothing is drawn. **/
+	public var probe:Null<HitProbe>;
 	private var local:Affine;
 	/** The transform of fills and strokes: `local`, or with the object's own scale taken out when `scale9` maps the points. **/
 	private var pathLocal:Affine;
@@ -160,7 +368,7 @@ private class WgpuGraphicsState
 	{
 		this.colorTransform = colorTransform;
 		this.renderer = renderer;
-		this.canvas = renderer.canvas;
+		this.canvas = renderer == null ? null : renderer.canvas;
 		this.local = local;
 		this.pathLocal = local;
 		this.alpha = alpha;
@@ -185,6 +393,9 @@ private class WgpuGraphicsState
 		pathLocal = local.after(Affine.scaling(1 / Math.abs(scaleX), 1 / Math.abs(scaleY)));
 		return true;
 	}
+
+	public inline function hasScale9():Bool
+		return scale9 != null;
 
 	private inline function mapX(px:Float):Float
 		return scale9 == null ? px : scale9.x(px);
@@ -634,6 +845,13 @@ private class WgpuGraphicsState
 	{
 		if (fillPaint == null || fillPath == null) return;
 
+		if (probe != null)
+		{
+			probe.fill(fillPath);
+			fillPath = new Path().moveTo(x, y);
+			return;
+		}
+
 		renderer.__beginVectors();
 		canvas.fill(fillPath, fillPaint, evenOdd ? EvenOdd : NonZero, pathLocal, alpha);
 		fillPath = new Path().moveTo(x, y);
@@ -642,6 +860,13 @@ private class WgpuGraphicsState
 	private function flushStroke():Void
 	{
 		if (stroke == null || strokePath == null) return;
+
+		if (probe != null)
+		{
+			probe.stroke(strokePath, stroke.width);
+			strokePath = new Path().moveTo(x, y);
+			return;
+		}
 
 		renderer.__beginVectors();
 		canvas.stroke(strokePath, stroke, strokePaint, pathLocal, alpha);

@@ -7,6 +7,9 @@ import openfl.display._internal.Context3DBuffer;
 import openfl.display._internal.DrawCommandBuffer;
 import openfl.display._internal.DrawCommandReader;
 import openfl.display._internal.ShaderBuffer;
+#if openfl_wgpu
+import openfl.display._internal.WgpuGraphics;
+#end
 import openfl.display3D.IndexBuffer3D;
 import openfl.display3D.VertexBuffer3D;
 import openfl.errors.ArgumentError;
@@ -1705,6 +1708,8 @@ import js.html.CanvasRenderingContext2D;
 			{
 				#if (js && html5)
 				return CanvasGraphics.hitTest(this, px, py);
+				#elseif openfl_wgpu
+				return WgpuGraphics.hitTest(this, px, py);
 				#elseif (lime_cffi)
 				return CairoGraphics.hitTest(this, px, py);
 				#end
